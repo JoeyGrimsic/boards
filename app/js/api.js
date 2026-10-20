@@ -37,6 +37,7 @@ export const api = {
   fetchUrl: (name, url) => call('POST', `${b(name)}/fetch`, { url }),
   importAsset: (name, fromBoard, src) => call('POST', `${b(name)}/import`, { fromBoard, src }),
   youtube: (name, opts) => call('POST', `${b(name)}/youtube`, opts),
+  youtubeList: url => call('POST', '/api/youtube-list', { url }),
   files: (name, dir) => call('GET', `${b(name)}/files?dir=${encodeURIComponent(dir)}`),
   beaconSave: (name, data) => {
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });

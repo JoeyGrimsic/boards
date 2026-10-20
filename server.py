@@ -259,6 +259,45 @@ def parse_time(t):
 
 
 YT_LOCK = threading.Lock()
+MAX_PLAYLIST = 200
+GONE_TITLES = {"[private video]", "[deleted video]", "[unavailable video]"}
+
+
+def youtube_list(url: str):
+    """List the songs in a YouTube playlist (titles + links) without downloading."""
+    cmd = ytdlp_cmd()
+    if not cmd:
+        raise ApiError(501, "yt-dlp is not installed. Run:  pip install yt-dlp   (or put yt-dlp.exe in the tools folder)")
+    if not re.match(r"^https?://", url or ""):
+        raise ApiError(400, "that doesn't look like a link")
+    args = cmd + ["--flat-playlist", "--yes-playlist", "-J", "--no-warnings",
+                  "--playlist-end", str(MAX_PLAYLIST), url]
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=180,
+                              encoding="utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
+        raise ApiError(504, "reading the playlist timed out")
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip().splitlines()
+        raise ApiError(502, next((l for l in reversed(err) if "ERROR" in l), err[-1] if err else "couldn't read the playlist")[:400])
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError:
+        raise ApiError(502, "couldn't understand yt-dlp's answer")
+    entries = data.get("entries")
+    if entries is None:  # a single video, not a playlist
+        entries = [data]
+    songs = []
+    for e in entries:
+        if not e or (e.get("title") or "").strip().lower() in GONE_TITLES:
+            continue
+        link = e.get("webpage_url") or e.get("url") or ""
+        if not link.startswith("http") and e.get("id"):
+            link = f"https://www.youtube.com/watch?v={e['id']}"
+        if link.startswith("http"):
+            songs.append({"url": link, "title": e.get("title") or ""})
+    return {"title": data.get("title") or "playlist", "entries": songs, "truncated": len(entries) >= MAX_PLAYLIST}
+
 
 
 def youtube_download(board: Path, url: str, mode: str, start=None, end=None):
@@ -572,6 +611,9 @@ class Handler(BaseHTTPRequestHandler):
                 "ytdlp": bool(ytdlp_cmd()),
                 "ffmpeg": bool(ffmpeg_path()),
             })
+
+        if parts == ["youtube-list"] and method == "POST":
+            return self.send_json(youtube_list(self.read_json().get("url", "").strip()))
 
         if parts == ["config"] and method == "POST":
             data = self.read_json()

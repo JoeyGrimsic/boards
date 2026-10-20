@@ -9,7 +9,7 @@ An infinite, doodle-style brainstorming canvas that keeps everything in plain fo
 - **#tags**: type `#` and existing tags are suggested (Tab accepts, keep typing to ignore). Things that share a tag get tied together by faint threads. Hover a tag to light them up, or click it to focus.
 - **Center pieces**: mark the main things on a board (P) and give them titles. ← / → hop between them left to right and loop around. A bar at the top shows the one you're on and what's to its left and right.
 - **Arrows** between things.
-- **Spatial music**: give any item a playlist from YouTube links or your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. The speaker button has a global volume slider.
+- **Spatial music**: give any item a playlist from YouTube links (single songs or whole YouTube playlists), or from your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. The speaker button has a global volume slider.
 - Themes: cream with hot pink, blue or red (shift+T).
 
 ## Start it

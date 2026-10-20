@@ -1,5 +1,5 @@
 // Getting stuff onto the board: paste, drag & drop, file picker, YouTube clips.
-import { S, uid, addItem, mutate, select } from './state.js';
+import { S, uid, addItem, mutate, select, getItem } from './state.js';
 import { api, assetUrl } from './api.js';
 import { spot, pasteItems } from './actions.js';
 import { toast, modal } from './ui.js';
@@ -7,7 +7,7 @@ import { openMusicDialog } from './music.js';
 import { endEdit, editor } from './text.js';
 import { esc } from './markdown.js';
 
-export const YT_RE = /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?|shorts\/|live\/|embed\/)|youtu\.be\/)\S+$/i;
+export const YT_RE = /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?|shorts\/|live\/|embed\/|playlist\?)|youtu\.be\/)\S+$/i;
 const IMG_URL_RE = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?\S*)?$/i;
 const R = Math.round;
 
@@ -177,11 +177,16 @@ export function pickFiles(p = spot()) {
 // ---------------------------------------------------------------- YouTube
 
 function youtubeChooser(url, p) {
+  const playlist = /[?&]list=/.test(url) && !/[?&]v=|youtu\.be\//.test(url);
+  const sel = S.sel.size === 1 ? getItem([...S.sel][0]) : null;
+  const target = sel && sel.type !== 'arrow' ? sel : null;
+  const what = playlist ? 'the whole playlist' : 'saved as an mp3';
   const m = modal({
-    title: 'a YouTube link!',
+    title: playlist ? 'a YouTube playlist!' : 'a YouTube link!',
     body: `<p class="sub">${esc(url)}</p><div class="choices">` +
-      `<button class="btn choice" data-act="music"><span data-icon="music"></span>music for this spot<small>saved as an mp3, loops when you're nearby</small></button>` +
-      `<button class="btn choice" data-act="clip"><span data-icon="video"></span>video clip<small>download a snippet onto the board</small></button>` +
+      (target ? `<button class="btn choice" data-act="music-sel"><span data-icon="music"></span>add to the selected thing's music<small>${what}, appended to its playlist</small></button>` : '') +
+      `<button class="btn choice" data-act="music"><span data-icon="music"></span>${playlist ? 'a music playlist for this spot' : 'music for this spot'}<small>${what}, loops when you're nearby</small></button>` +
+      (playlist ? '' : `<button class="btn choice" data-act="clip"><span data-icon="video"></span>video clip<small>download a snippet onto the board</small></button>`) +
       `<button class="btn choice" data-act="link"><span data-icon="link"></span>just the link<small>as a text box</small></button></div>`,
   });
   m.el.addEventListener('click', e => {
@@ -189,6 +194,7 @@ function youtubeChooser(url, p) {
     if (!act || act === 'x') return;
     m.close();
     if (act === 'music') openMusicDialog({ at: p, url });
+    if (act === 'music-sel') openMusicDialog({ targetId: target.id, url });
     if (act === 'clip') openClipDialog(url, p);
     if (act === 'link') addTextItem(url, p);
   });
