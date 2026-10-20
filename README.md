@@ -1,0 +1,97 @@
+# doodleboard ✶
+
+An infinite, doodle-style brainstorming canvas that keeps everything in plain folders on your computer.
+
+- Pan and zoom forever on a quiet dot grid.
+- Paste screenshots and images straight from the clipboard. They're saved into the board's own folder.
+- Drop in video files, or grab a clip from YouTube, and trim it to a looping snippet.
+- Make text boxes, headings and sticky notes fast, with a handful of single-key shortcuts.
+- **#tags**: type `#` and existing tags are suggested (Tab accepts, keep typing to ignore). Things that share a tag get tied together by faint threads. Hover a tag to light them up, or click it to focus.
+- **Center pieces**: mark the main things on a board (P) and give them titles. ← / → hop between them left to right and loop around. A bar at the top shows the one you're on and what's to its left and right.
+- **Arrows** between things.
+- **Spatial music**: give any item a playlist from YouTube links or your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. The speaker button has a global volume slider.
+- Themes: cream with hot pink, blue or red (shift+T).
+
+## Start it
+
+You need **Python 3.9+**. Nothing else is required for the basic app.
+
+| | |
+|---|---|
+| Windows | double-click **`start.bat`** |
+| Mac / Linux | `./start.sh` |
+| anything | `python server.py` |
+
+It opens in its own window if Edge or Chrome is installed (`--app` mode), otherwise in your browser at `http://localhost:7777`. Leave the console window open while you work, and close it to stop.
+
+### For YouTube → mp3 / clips (optional)
+
+```
+pip install yt-dlp
+winget install ffmpeg        # or: brew install ffmpeg / apt install ffmpeg
+```
+
+Then restart. Or drop `yt-dlp.exe` and `ffmpeg.exe` into the `tools/` folder instead.
+
+## Where your stuff lives
+
+```
+boards/
+  my board/
+    board.json        everything on the canvas (human-readable JSON)
+    board.json.bak    rolling backup, refreshed every ~5 minutes
+    assets/
+      images/         pasted & dropped images
+      video/          video files and YouTube clips
+      music/          mp3s, e.g. "Some Song (Official Video).mp3"
+```
+
+A board is just a folder, so you can copy it, zip it, sync it with Dropbox or OneDrive, or put it in git. Deleted boards go to `boards/.trash/`. To keep boards somewhere else, use **"use a different folder…"** on the home screen, or run `python server.py --boards "D:\Brainstorms"`. The choice is remembered.
+
+## Shortcuts
+
+Press **`?`** in the app for the full list. The essentials:
+
+| make | | organize | | move |
+|---|---|---|---|---|
+| double-click | text here | `#` | tag selection | drag empty space · pan |
+| `T` | text | `P` | center piece | wheel · zoom |
+| `H` | heading | `A` / alt+drag | arrow | `0` · fit all / selection |
+| `N` | sticky note | `G` | map of center pieces & tags | `1` · 100% |
+| `M` | music / playlist | `L` | tag threads on/off | `←` `→` · previous / next center piece |
+| `I` | image / video file | `F` | next font | shift+drag · box select |
+| `V` | YouTube clip | `[` `]` | smaller / bigger | space+drag · pan anywhere |
+| ctrl+V | paste anything | `C` | next color | `/` · search |
+| | | | | ctrl+arrows · nudge selection |
+
+While typing: `Esc` finishes, `Tab` accepts a tag suggestion, `ctrl+B` / `ctrl+I` for bold / italic, alt+F changes font, ctrl+`[` / `]` resizes. Lines starting with `- `, `[ ] ` or `# ` become bullets, checkboxes and headings. Drag a text box's corner to change its width, or shift+drag the corner to scale the font.
+
+## Web app or desktop app?
+
+It's a **local web app**: a tiny Python server (`server.py`, standard library only) plus a plain HTML/JS front end (`app/`, no build step).
+
+- The server is what lets the browser write real files on disk, which is how pasted images land in the board folder. It also runs yt-dlp and ffmpeg. It only listens on `localhost`, so nothing is reachable from your network.
+- The `--app` window makes it feel like a desktop program. To make it a "real" `.exe` later, the same `app/` folder can be wrapped with Tauri, Electron or pywebview without rewriting anything.
+- To host it as a website someday, the server's job (storing boards and files) would move to a real backend with accounts and storage. The front end would mostly stay the same, because it only talks to the small API in `app/js/api.js`.
+
+## Project layout
+
+```
+server.py            local server: boards API, uploads, YouTube downloads, static files
+app/index.html       the shell
+app/style.css        doodle styling + the three themes
+app/js/
+  main.js            routing between home and a board
+  state.js           board state, undo/redo, autosave
+  canvas.js          camera: pan, zoom, fly-to, grid
+  render.js          items -> DOM / SVG
+  interact.js        mouse, keyboard, clipboard, drag & drop
+  text.js  ac.js     text editing + #tag autocomplete
+  tags.js            tag parsing, colors, thread layout
+  music.js           spatial music, playlists, volume, music dialog
+  trim.js            waveform trim editor
+  centers.js         center pieces + arrow-key navigation
+  media.js           paste / drop / upload / YouTube clips
+  chrome.js          toolbars, selection bar, search, map, context menu, help
+  home.js            board picker
+```

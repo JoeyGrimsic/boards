@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-theme="pink">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>doodleboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3.5l1.8 6.6 6.6 1.9-6.6 1.9L12 20.5l-1.8-6.6-6.6-1.9 6.6-1.9z' fill='%23ff2e93' stroke='%23111' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================== board -->
+<div id="board" hidden>
+  <div id="viewport">
+    <div id="world">
+      <svg id="links" width="1" height="1">
+        <g id="threads"></g><g id="radii"></g><g id="arrows"></g><g id="overlay"></g>
+      </svg>
+      <div id="items"></div>
+    </div>
+  </div>
+  <div id="marquee" hidden></div>
+
+  <div id="hint" hidden>
+    <p><b>double-click</b> anywhere to write</p>
+    <p>paste screenshots with <kbd>ctrl</kbd>+<kbd>V</kbd> · drop images &amp; videos</p>
+    <p>press <kbd>?</kbd> for every shortcut</p>
+  </div>
+
+  <header id="top-left" class="bar">
+    <button class="btn icon" data-cmd="home" data-icon="home" title="all boards"></button>
+    <button id="board-name" class="btn txt name" data-cmd="rename" title="rename board"></button>
+    <span id="save-state"></span>
+  </header>
+
+  <div id="top-right" class="bar">
+    <button class="btn icon" data-cmd="search" data-icon="search" title="search  ( / )"></button>
+    <button class="btn icon" data-cmd="nav" data-icon="compass" title="map of center pieces & tags  (G)"></button>
+    <button class="btn icon" data-cmd="threads" data-icon="threads" title="tag threads  (L)"></button>
+    <button class="btn icon" data-cmd="volume" title="music volume  (shift+M mutes)"></button>
+    <button class="btn icon" data-cmd="theme" data-icon="theme" title="theme  (shift+T)"></button>
+    <button class="btn icon" data-cmd="help" data-icon="help" title="shortcuts  ( ? )"></button>
+  </div>
+
+  <nav id="tools" class="bar vertical">
+    <button class="btn icon tool" data-cmd="text" data-icon="text" title="text — T (or double-click)"><kbd>T</kbd></button>
+    <button class="btn icon tool" data-cmd="heading" data-icon="heading" title="heading — H"><kbd>H</kbd></button>
+    <button class="btn icon tool" data-cmd="note" data-icon="note" title="sticky note — N"><kbd>N</kbd></button>
+    <button class="btn icon tool" data-cmd="piece" data-icon="sparkle" title="center piece — P (then ← → to hop between them)"><kbd>P</kbd></button>
+    <button class="btn icon tool" data-cmd="arrow" data-icon="arrow" title="arrows — A (or alt+drag)"><kbd>A</kbd></button>
+    <button class="btn icon tool" data-cmd="music" data-icon="music" title="music — M"><kbd>M</kbd></button>
+    <button class="btn icon tool" data-cmd="media" data-icon="image" title="image / video / audio file — I"><kbd>I</kbd></button>
+    <button class="btn icon tool" data-cmd="clip" data-icon="youtube" title="YouTube clip — V"><kbd>V</kbd></button>
+    <span class="sep"></span>
+    <button class="btn icon tool" data-cmd="undo" data-icon="undo" title="undo — ctrl+Z"></button>
+    <button class="btn icon tool" data-cmd="redo" data-icon="redo" title="redo — ctrl+Y"></button>
+  </nav>
+
+  <div id="zoombar" class="bar">
+    <button class="btn icon" data-cmd="zoomout" data-icon="minus" title="zoom out  ( - )"></button>
+    <button class="btn txt" id="zoom-label" data-cmd="zoom100" title="back to 100%  ( 1 )">100%</button>
+    <button class="btn icon" data-cmd="zoomin" data-icon="plus" title="zoom in  ( + )"></button>
+    <button class="btn icon" data-cmd="fit" data-icon="fit" title="show everything  ( 0 )"></button>
+  </div>
+
+  <div id="nowplaying" class="sketch" hidden>
+    <span class="eq"><i></i><i></i><i></i><i></i></span>
+    <span class="np-title"></span>
+    <button class="btn icon mini" data-cmd="skip" data-icon="next" title="next song" hidden></button>
+    <button class="btn icon mini" data-cmd="volume" title="volume"></button>
+  </div>
+
+  <div id="volpop" class="sketch" hidden>
+    <button class="btn icon mini" data-vol="mute" title="mute / unmute  (shift+M)"></button>
+    <input type="range" min="0" max="1" step="0.01" aria-label="music volume">
+    <span class="pct"></span>
+  </div>
+
+  <div id="centerbar" class="bar" hidden></div>
+  <div id="seltools" class="bar" hidden></div>
+  <div id="tagedit" class="sketch" hidden></div>
+  <aside id="panel" class="sketch" hidden></aside>
+  <div id="searchbox" class="sketch" hidden>
+    <span data-icon="search"></span>
+    <input placeholder="search text, titles, #tags…" spellcheck="false">
+    <div class="results"></div>
+  </div>
+  <div id="ctx" class="sketch" hidden></div>
+  <input id="title-edit" hidden spellcheck="false">
+</div>
+
+<!-- ============================== home -->
+<div id="home" hidden></div>
+
+<div id="ac" class="sketch" hidden></div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
