@@ -9,18 +9,18 @@
   --font-ui: 'Fredoka', 'Nunito', system-ui, sans-serif;  /* LittleBigPlanet-style rounded letters */
 }
 :root, [data-theme="pink"] {
-  --bg: #f7efe1; --ink: #2b1a22; --ink-soft: #6d5560; --muted: #b0989f; --panel: #fffaf0;
+  --bg: #f7efe1; --ink: #2b1a22; --ink-soft: #6d5560; --muted: #b0989f; --panel: #fffaf0; --note: #fdf5e7;
   --accent: #ff2e93; --accent-ink: #ffffff; --grid: rgba(255, 46, 147, .27); --hl: rgba(255, 46, 147, .1);
   --shadow: 3px 3px 0 #ff2e93; --sel: #ff2e93; --danger: #ff2e93;
   color-scheme: light;
 }
 [data-theme="blue"] {
-  --bg: #f6efe2; --ink: #1a2338; --ink-soft: #505b74; --muted: #9ba2b2; --panel: #fffaf0;
+  --bg: #f6efe2; --ink: #1a2338; --ink-soft: #505b74; --muted: #9ba2b2; --panel: #fffaf0; --note: #fcf6ea;
   --accent: #2563eb; --accent-ink: #ffffff; --grid: rgba(37, 99, 235, .24); --hl: rgba(37, 99, 235, .09);
   --shadow: 3px 3px 0 #2563eb; --sel: #2563eb; --danger: #dc2f2f;
 }
 [data-theme="red"] {
-  --bg: #f7eee0; --ink: #2c1714; --ink-soft: #704f48; --muted: #b59d95; --panel: #fffaf0;
+  --bg: #f7eee0; --ink: #2c1714; --ink-soft: #704f48; --muted: #b59d95; --panel: #fffaf0; --note: #fdf4e6;
   --accent: #e0312b; --accent-ink: #ffffff; --grid: rgba(224, 49, 43, .24); --hl: rgba(224, 49, 43, .09);
   --shadow: 3px 3px 0 #e0312b; --sel: #e0312b; --danger: #e0312b;
 }
@@ -200,24 +200,36 @@ button.pill { cursor: pointer; font-size: 17px; }
   font-family: var(--ff); font-weight: var(--fw, 400); font-size: var(--fs); color: var(--fc); line-height: 1.3;
 }
 .item.text .body { flex: 1; transform: rotate(var(--rot)); background: var(--paper); }
+/* sticky notes wear the theme: cream paper, outlined in the theme color */
 .item.text.note .body {
-  border: 2px solid var(--ink); padding: 6px;
-  border-radius: 4px 7px 3px 8px / 8px 3px 7px 4px; box-shadow: 4px 5px 0 rgba(0, 0, 0, .12);
+  border: 2.5px solid var(--accent); padding: 6px;
+  border-radius: 4px 7px 3px 8px / 8px 3px 7px 4px;
+  box-shadow: 4px 5px 0 color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .item.text.pastel { --item-ink: #232323; }
-.item.text.pastel .body { border-color: rgba(0, 0, 0, .55); }
 .item.text.inknote { --item-ink: var(--bg); }
 .item.text.editing:not(.note) .body { outline: 1.5px dashed var(--muted); outline-offset: 2px; border-radius: 4px; }
 .content, .editor { padding: 4px 10px; }
 .content { overflow-wrap: anywhere; }
-.content > div { white-space: pre-wrap; min-height: 1em; }
+.content > div { white-space: pre-wrap; min-height: 1em; --lvl: 0; padding-left: calc(var(--lvl) * 1.5em); }
 .content .h1 { font-size: 1.7em; line-height: 1.1; margin: .05em 0 .15em; }
 .content .h2 { font-size: 1.35em; line-height: 1.15; margin: .05em 0 .1em; }
 .content .h3 { font-size: 1.12em; font-weight: bold; }
-.content .li { position: relative; padding-left: calc(1.1em + var(--ind) * .5em); }
-.content .li::before { content: '•'; position: absolute; left: calc(var(--ind) * .5em + .2em); }
-.content .li.num::before { content: attr(data-n); left: calc(var(--ind) * .5em); }
-.content .ck { display: flex; gap: .4em; align-items: baseline; padding-left: calc(var(--ind) * .5em); }
+.content .li { position: relative; padding-left: calc(var(--lvl) * 1.5em + 1.15em); }
+/* bullets drawn as shapes so they look the same in every font: ● ○ ■ by level */
+.content .li::before {
+  content: ''; position: absolute; left: calc(var(--lvl) * 1.5em + .3em); top: .66em;
+  width: .36em; height: .36em; transform: translateY(-50%); box-sizing: border-box;
+  border-radius: 50%; background: currentColor;
+}
+.content .li.b1::before { background: none; border: .09em solid currentColor; }
+.content .li.b2::before { border-radius: .06em; width: .32em; height: .32em; }
+.content .li.num { padding-left: calc(var(--lvl) * 1.5em + 1.5em); }
+.content .li.num::before {
+  content: attr(data-n); left: calc(var(--lvl) * 1.5em); top: 0; width: auto; height: auto;
+  transform: none; background: none; border: 0; border-radius: 0;
+}
+.content .ck { display: flex; gap: .4em; align-items: baseline; }
 .content .ck .box {
   width: .7em; height: .7em; flex: none; position: relative; top: .08em; cursor: pointer;
   border: 2px solid currentColor; border-radius: 3px 5px 2px 4px;

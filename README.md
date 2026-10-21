@@ -88,7 +88,7 @@ Press **`?`** in the app for the full list. The essentials:
 | ctrl+V | paste anything | `C` | next color | `/` · search |
 | | | | | ctrl+arrows · nudge selection |
 
-While typing: `Esc` finishes, `Tab` accepts a tag suggestion, `ctrl+B` / `ctrl+I` for bold / italic, alt+F changes font, ctrl+`[` / `]` resizes. Lines starting with `- `, `[ ] ` or `# ` become bullets, checkboxes and headings. Drag a text box's corner to change its width, or shift+drag the corner to scale the font.
+While typing: `Esc` finishes, `Tab` accepts a tag suggestion (otherwise `Tab` / `shift+Tab`, or `ctrl+]` / `ctrl+[`, indent and outdent the paragraph, like Google Docs), `ctrl+B` / `ctrl+I` for bold / italic, alt+F changes font, `ctrl+shift+>` / `<` resizes. Lines starting with `- `, `[ ] ` or `# ` become bullets, checkboxes and headings. Indented bullets change shape by level (● ○ ■). Drag a text box's corner to change its width, or shift+drag the corner to scale the font.
 
 ## Web app or desktop app?
 

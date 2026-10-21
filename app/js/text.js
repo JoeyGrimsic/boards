@@ -122,6 +122,36 @@ function lineStart(pos) {
   return ta.value.lastIndexOf('\n', pos - 1) + 1;
 }
 
+/** Indent (dir 1) or outdent (dir -1) every line the selection touches by one level. */
+function indentLines(dir) {
+  const v = ta.value;
+  const a = ta.selectionStart, b = ta.selectionEnd;
+  const start = lineStart(a);
+  // a selection ending right after a newline doesn't include the next line
+  const last = b > a && v[b - 1] === '\n' ? b - 1 : b;
+  let end = v.indexOf('\n', last);
+  if (end < 0) end = v.length;
+  const lines = v.slice(start, end).split('\n');
+  const multi = lines.length > 1;
+  let da = 0, db = 0;
+  const out = lines.map((l, k) => {
+    let d = 0;
+    if (dir > 0) {
+      if (!(multi && !l.trim())) { l = '  ' + l; d = 2; } // leave blank lines alone
+    } else {
+      const n = l.startsWith('\t') ? 1 : (l.match(/^ {1,2}/)?.[0].length || 0);
+      l = l.slice(n);
+      d = -n;
+    }
+    if (k === 0) da = d;
+    db += d;
+    return l;
+  });
+  ta.setRangeText(out.join('\n'), start, end, 'preserve');
+  ta.setSelectionRange(Math.max(start, a + da), Math.max(start, b + db));
+  onInput();
+}
+
 function onKey(e) {
   e.stopPropagation(); // keep global shortcuts out of the editor
   const mod = e.ctrlKey || e.metaKey;
@@ -141,7 +171,9 @@ function onKey(e) {
   }
   if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); wrap('**'); return; }
   if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); wrap('*'); return; }
-  if (mod && (e.key === ']' || e.key === '[')) { e.preventDefault(); changeSize(e.key === ']' ? 1 : -1); return; }
+  // like Google Docs: ctrl+] / ctrl+[ indent, ctrl+shift+> / < change the size
+  if (mod && !e.shiftKey && (e.key === ']' || e.key === '[')) { e.preventDefault(); indentLines(e.key === ']' ? 1 : -1); return; }
+  if (mod && e.shiftKey && (e.code === 'Period' || e.code === 'Comma')) { e.preventDefault(); changeSize(e.code === 'Period' ? 1 : -1); return; }
   if (e.altKey && e.code === 'KeyF') { e.preventDefault(); cycleFont(e.shiftKey ? -1 : 1); return; }
 
   const pos = ta.selectionStart;
@@ -153,8 +185,14 @@ function onKey(e) {
     if (m) {
       e.preventDefault();
       if (line.trim() === m[0].trim()) {
-        // empty list item: end the list
-        ta.setRangeText('', ls, pos, 'end');
+        if (m[1].length) {
+          // empty nested item: step back out one level (like Google Docs)
+          const n = m[1].startsWith('\t') ? 1 : Math.min(2, m[1].length);
+          ta.setRangeText('', ls, ls + n, 'end');
+          ta.setSelectionRange(pos - n, pos - n);
+        } else {
+          ta.setRangeText('', ls, pos, 'end'); // empty top-level item: end the list
+        }
       } else {
         let marker = m[2];
         if (m[3]) marker = `${+m[3] + 1}${m[4]} `;
@@ -167,15 +205,7 @@ function onKey(e) {
   }
   if (e.key === 'Tab') {
     e.preventDefault();
-    if (LIST_RE.test(ta.value.slice(ls))) {
-      if (e.shiftKey) {
-        const n = ta.value.slice(ls).match(/^ {1,2}/)?.[0].length || 0;
-        if (n) ta.setRangeText('', ls, ls + n, 'preserve');
-      } else ta.setRangeText('  ', ls, ls, 'preserve');
-      const p = Math.max(ls, pos + (e.shiftKey ? -2 : 2));
-      ta.setSelectionRange(p, p);
-    } else if (!e.shiftKey) ta.setRangeText('  ', pos, ta.selectionEnd, 'end');
-    onInput();
+    indentLines(e.shiftKey ? -1 : 1);
     return;
   }
   if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setTimeout(updateSuggest, 0);

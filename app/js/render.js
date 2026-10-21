@@ -27,7 +27,7 @@ export const INKS = {
   green: '#2f9e44', blue: '#1c7ed6', purple: '#7048e8', gray: '#868e96',
 };
 export const PAPERS = {
-  paper: 'var(--panel)', yellow: '#fff1a6', pink: '#ffd3e8', mint: '#cdf3dd',
+  paper: 'var(--note)', yellow: '#fff1a6', pink: '#ffd3e8', mint: '#cdf3dd',
   sky: '#d3e9ff', lilac: '#e5dbff', peach: '#ffe0c7', ink: 'var(--ink)',
 };
 

@@ -681,10 +681,11 @@ export function showHelp() {
       <tr><th colspan="2">text</th></tr>
       ${k('enter', 'edit selected text')}${k('esc', 'stop editing')}
       ${k('F', 'next font (alt+F while typing)')}
-      ${k('[ ]', 'smaller / bigger (ctrl+[ ] while typing)')}
+      ${k('[ ]', 'smaller / bigger (ctrl+shift+&lt; &gt; while typing)')}
+      ${k('tab shift+tab', 'indent / outdent (or ctrl+] ctrl+[)')}
       ${k('C', 'next color')}
       ${k('ctrl+B ctrl+I', 'bold / italic')}
-      <tr><td colspan="2">start a line with <code>- </code> bullet · <code>[ ] </code> checkbox · <code># </code> big heading</td></tr>
+      <tr><td colspan="2">start a line with <code>- </code> bullet · <code>[ ] </code> checkbox · <code># </code> big heading · tab on a bullet nests it</td></tr>
       <tr><th colspan="2">move around</th></tr>
       ${k('drag', 'pan (on empty space)')}${k('wheel', 'zoom')}
       ${k('space+drag', 'pan from anywhere')}${k('shift+drag', 'box select')}

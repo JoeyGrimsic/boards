@@ -42,7 +42,7 @@ export const createHeading = (p = spot()) =>
 
 export const createNote = (p = spot()) =>
   createText({ x: p.x - 110, y: p.y - 80 }, {
-    font: 'round', size: 24, w: 240, h: 200, bg: { blue: 'sky', red: 'peach' }[theme()] || 'pink',
+    font: 'round', size: 24, w: 240, h: 200, bg: 'paper',
   });
 
 export function addArrow(from, to) {

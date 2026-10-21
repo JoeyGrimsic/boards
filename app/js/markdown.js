@@ -24,26 +24,38 @@ function inline(raw) {
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => keep[+i]);
 }
 
+/** Indent level of a line's leading whitespace: two spaces (or one tab) per level. */
+export function indentLevel(ws) {
+  let cols = 0;
+  for (const c of ws) cols += c === '\t' ? 2 : 1;
+  return Math.min(Math.floor(cols / 2), 8);
+}
+
 export function renderMarkdown(text) {
   let html = '';
   const lines = String(text || '').split('\n');
-  lines.forEach((line, i) => {
+  lines.forEach((raw, i) => {
+    const ws = raw.match(/^[ \t]*/)[0];
+    const lvl = indentLevel(ws);
+    const line = raw.slice(ws.length);
+    const st = lvl ? ` style="--lvl:${lvl}"` : '';
     let m;
-    if ((m = line.match(/^(#{1,3}) (.*)$/))) {
+    if (!lvl && (m = line.match(/^(#{1,3}) (.*)$/))) {
       html += `<div class="h${m[1].length}">${inline(m[2]) || '&nbsp;'}</div>`;
-    } else if ((m = line.match(/^(\s*)(?:[-*] )?\[( |x|X)\] ?(.*)$/))) {
-      const done = m[2] !== ' ';
-      html += `<div class="ck${done ? ' done' : ''}" style="--ind:${m[1].length}"><span class="box" data-check="${i}"></span><span>${inline(m[3]) || '&nbsp;'}</span></div>`;
-    } else if ((m = line.match(/^(\s*)[-*•] (.*)$/))) {
-      html += `<div class="li" style="--ind:${m[1].length}">${inline(m[2]) || '&nbsp;'}</div>`;
-    } else if ((m = line.match(/^(\s*)(\d+)[.)] (.*)$/))) {
-      html += `<div class="li num" data-n="${m[2]}." style="--ind:${m[1].length}">${inline(m[3]) || '&nbsp;'}</div>`;
+    } else if ((m = line.match(/^(?:[-*] )?\[( |x|X)\] ?(.*)$/))) {
+      const done = m[1] !== ' ';
+      html += `<div class="ck${done ? ' done' : ''}"${st}><span class="box" data-check="${i}"></span><span>${inline(m[2]) || '&nbsp;'}</span></div>`;
+    } else if ((m = line.match(/^[-*•] (.*)$/))) {
+      // bullet shape follows the level: ● ○ ■, then around again
+      html += `<div class="li b${lvl % 3}"${st}>${inline(m[1]) || '&nbsp;'}</div>`;
+    } else if ((m = line.match(/^(\d+)[.)] (.*)$/))) {
+      html += `<div class="li num" data-n="${m[1]}."${st}>${inline(m[2]) || '&nbsp;'}</div>`;
     } else if ((m = line.match(/^> ?(.*)$/))) {
-      html += `<div class="quote">${inline(m[1]) || '&nbsp;'}</div>`;
-    } else if (/^\s*(-{3,}|_{3,}|\*{3,})\s*$/.test(line)) {
+      html += `<div class="quote"${st}>${inline(m[1]) || '&nbsp;'}</div>`;
+    } else if (!lvl && /^(-{3,}|_{3,}|\*{3,})\s*$/.test(line)) {
       html += '<hr>';
     } else {
-      html += `<div class="p">${inline(line) || '&nbsp;'}</div>`;
+      html += `<div class="p"${st}>${inline(line) || '&nbsp;'}</div>`;
     }
   });
   return html;
