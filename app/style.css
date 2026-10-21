@@ -384,10 +384,12 @@ button.pill { cursor: pointer; font-size: 17px; }
 @media (max-width: 1000px) { #centerbar .side .nm { display: none; } #centerbar { max-width: none; } }
 
 /* ================================================================ volume */
-#volpop { position: fixed; z-index: 45; display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; }
+#volpop { position: fixed; z-index: 45; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 14px 8px 6px; max-width: 290px; }
+#volpop .norm { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink-soft); padding-left: 8px; cursor: pointer; }
+#volpop .norm input { accent-color: var(--accent); }
 #volpop .btn { border-color: transparent; background: transparent; }
-#volpop input { width: 160px; accent-color: var(--accent); cursor: pointer; }
-#volpop.muted input { opacity: .4; }
+#volpop input[type=range] { width: 160px; accent-color: var(--accent); cursor: pointer; }
+#volpop.muted input[type=range] { opacity: .4; }
 #volpop .pct { min-width: 50px; font-size: 16px; text-align: right; color: var(--ink-soft); }
 
 /* ================================================================ music dialog */

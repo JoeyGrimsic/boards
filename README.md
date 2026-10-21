@@ -9,7 +9,7 @@ An infinite, doodle-style brainstorming canvas that keeps everything in plain fo
 - **#tags**: type `#` and existing tags are suggested (Tab accepts, keep typing to ignore). Things that share a tag get tied together by faint threads. Hover a tag to light them up, or click it to focus.
 - **Center pieces**: mark the main things on a board (P) and give them titles. ← / → hop between them left to right and loop around. A bar at the top shows the one you're on and what's to its left and right.
 - **Arrows** between things.
-- **Spatial music**: give any item a playlist from YouTube links (single songs or whole YouTube playlists), or from your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. The speaker button has a global volume slider.
+- **Spatial music**: give any item a playlist from YouTube links (single songs or whole YouTube playlists), or from your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. Songs are normalized, so they all play at about the same loudness (the files themselves aren't changed). The speaker button has a global volume slider and the normalization switch.
 - Themes: cream with hot pink, blue or red (shift+T).
 
 ## Start it
@@ -33,6 +33,21 @@ winget install ffmpeg        # or: brew install ffmpeg / apt install ffmpeg
 
 Then restart. Or drop `yt-dlp.exe` and `ffmpeg.exe` into the `tools/` folder instead.
 
+## Updating
+
+If you got doodleboard with git, double-click **`update.bat`** (or run `git pull` in the folder), then restart it. Updates never touch your boards, because the `boards/` folder isn't part of the repo.
+
+To switch from a zip download to git (one time only):
+
+1. Install Git: `winget install Git.Git` (or download it from https://git-scm.com). Then open a new terminal.
+2. In the folder where you want the app, run:
+   ```
+   git clone https://github.com/JoeyGrimsic/boards.git doodleboard
+   ```
+   If the repo is private, Git asks you to sign in to GitHub the first time.
+3. Move your old `boards` folder into the new `doodleboard` folder. Or leave it where it is and point the app at it with **"use a different folder…"** on the home screen.
+4. From then on, use `update.bat` whenever you want the latest version.
+
 ## Where your stuff lives
 
 ```
@@ -40,6 +55,7 @@ boards/
   my board/
     board.json        everything on the canvas (human-readable JSON)
     board.json.bak    rolling backup, refreshed every ~5 minutes
+    .loudness.json    measured song loudness, so each song is only measured once
     assets/
       images/         pasted & dropped images
       video/          video files and YouTube clips

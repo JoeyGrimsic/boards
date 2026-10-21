@@ -4,7 +4,7 @@ import { S } from './state.js';
 import { assetUrl } from './api.js';
 import { icon } from './doodle.js';
 import { clamp } from './geom.js';
-import { getMaster, setPreviewing } from './music.js';
+import { getMaster, setPreviewing, trackGain } from './music.js';
 
 const MIN_LEN = 1; // seconds
 const peaksCache = new Map(); // url -> { peaks, duration }
@@ -181,7 +181,7 @@ export function trimEditor(host, track, onChange) {
     if (!data) return;
     if (!preview.paused) return stop();
     preview.currentTime = start;
-    preview.volume = getMaster();
+    preview.volume = clamp(getMaster() * Math.min(trackGain(track.src) ?? 1, 1), 0, 1);
     setPreviewing(true); // board music steps aside while you listen
     preview.play().then(() => {
       playBtn.innerHTML = icon('pause');

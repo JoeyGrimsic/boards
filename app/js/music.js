@@ -21,12 +21,56 @@ let soundOn = load('doodle-sound') !== 'off';
 let master = (() => { const v = parseFloat(load('doodle-volume')); return isFinite(v) ? clamp(v, 0, 1) : 0.8; })();
 let blocked = false;     // browser wants a click before audio may play
 let previewing = false;  // the trim editor is playing a preview
+let normalizeOn = load('doodle-normalize') !== 'off';
 const np = document.getElementById('nowplaying');
 const volpop = document.getElementById('volpop');
 
 export const isSoundOn = () => soundOn;
 export const getMaster = () => master;
 export const setPreviewing = v => { previewing = v; };
+
+// ---------------------------------------------------------------- loudness
+// Songs are measured once by the server (ffmpeg); playback then nudges each
+// one to the same loudness. The audio files themselves are never changed.
+
+const gains = new Map(); // "board/src" -> dB, or a pending Promise
+let actx = null;         // Web Audio, so quiet songs can be boosted past 100%
+
+/** Start measuring a song if we haven't yet. */
+export function prefetchGain(src) {
+  if (!S.name || !src) return;
+  const key = `${S.name}/${src}`;
+  if (gains.has(key)) return;
+  gains.set(key, api.loudness(S.name, src)
+    .then(r => gains.set(key, +r.gain || 0))
+    .catch(() => gains.set(key, 0)));
+}
+
+/** Linear gain for a song: 1 when normalizing is off, null while still measuring. */
+export function trackGain(src) {
+  if (!normalizeOn) return 1;
+  prefetchGain(src);
+  const g = gains.get(`${S.name}/${src}`);
+  return typeof g === 'number' ? Math.pow(10, g / 20) : null;
+}
+
+export const isNormalizing = () => normalizeOn;
+
+export function setNormalize(on) {
+  normalizeOn = on;
+  store('doodle-normalize', on ? 'on' : 'off');
+  syncSoundUI();
+}
+
+/** Send a player through a gain node once the browser lets audio run. */
+function route(p) {
+  if (p.gainNode || !actx || actx.state !== 'running') return;
+  try {
+    const node = actx.createMediaElementSource(p.audio);
+    p.gainNode = actx.createGain();
+    node.connect(p.gainNode).connect(actx.destination);
+  } catch { /* stays on plain volume */ }
+}
 
 // ---------------------------------------------------------------- playlist data
 
@@ -76,8 +120,9 @@ export function syncSoundUI() {
     b.innerHTML = icon(muted ? 'mute' : 'sound');
     b.classList.toggle('off', muted);
   });
-  const range = volpop.querySelector('input');
+  const range = volpop.querySelector('input[type=range]');
   range.value = master;
+  volpop.querySelector('[name=normalize]').checked = normalizeOn;
   range.style.setProperty('--fill', `${master * 100}%`);
   volpop.classList.toggle('muted', !soundOn);
   volpop.querySelector('.pct').textContent = soundOn ? `${Math.round(master * 100)}%` : 'muted';
@@ -95,7 +140,8 @@ export function toggleVolumePopover(anchor) {
   volpop.style.top = y + 'px';
 }
 
-volpop.querySelector('input').addEventListener('input', e => setMaster(+e.target.value));
+volpop.querySelector('input[type=range]').addEventListener('input', e => setMaster(+e.target.value));
+volpop.querySelector('[name=normalize]').addEventListener('change', e => setNormalize(e.target.checked));
 volpop.querySelector('[data-vol="mute"]').addEventListener('click', toggleSound);
 volpop.addEventListener('keydown', e => e.stopPropagation());
 addEventListener('pointerdown', e => {
@@ -197,10 +243,19 @@ function tick() {
       if (track.start && p.audio.currentTime < track.start - 0.3) p.audio.currentTime = track.start;
       if (track.end && p.audio.currentTime >= track.end) next(p);
     }
-    const t = id === targetId ? bestF * (it.music.volume ?? 0.8) : 0;
+    // wait for a new song's loudness before starting it, so it doesn't blast in
+    const g = trackGain(track.src);
+    if (id === targetId) prefetchGain(tracks[(p.idx + 1) % tracks.length].src);
+    const t = id === targetId && g != null ? bestF * (it.music.volume ?? 0.8) : 0;
     p.vol += (t - p.vol) * (t > p.vol ? 0.08 : 0.18);
     if (Math.abs(t - p.vol) < 0.003) p.vol = t;
-    p.audio.volume = clamp(p.vol * master, 0, 1);
+    route(p);
+    if (p.gainNode) {
+      p.gainNode.gain.setTargetAtTime(g ?? 1, actx.currentTime, 0.15);
+      p.audio.volume = clamp(p.vol * master, 0, 1);
+    } else {
+      p.audio.volume = clamp(p.vol * master * Math.min(g ?? 1, 1), 0, 1);
+    }
     if (t > 0 && p.audio.paused && !blocked) {
       p.audio.play().catch(err => { if (err.name === 'NotAllowedError') blocked = true; });
     }
@@ -234,7 +289,13 @@ export function stopAll() {
 }
 
 // browsers block audio until the first click/keypress
-const unblock = () => { blocked = false; };
+const unblock = () => {
+  blocked = false;
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { actx = false; }
+  }
+  if (actx && actx.state !== 'running') actx.resume().catch(() => {});
+};
 addEventListener('pointerdown', unblock, true);
 addEventListener('keydown', unblock, true);
 setInterval(tick, 100);
@@ -366,6 +427,7 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
   });
 
   const addTrack = (t, quiet = false) => {
+    prefetchGain(t.src); // measure loudness right away so it's ready to play
     if (m.closed) return appendLive(t, quiet);
     draft.tracks.push(t);
     if (openTrim < 0) return renderPlaylist();

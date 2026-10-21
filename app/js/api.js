@@ -38,6 +38,7 @@ export const api = {
   importAsset: (name, fromBoard, src) => call('POST', `${b(name)}/import`, { fromBoard, src }),
   youtube: (name, opts) => call('POST', `${b(name)}/youtube`, opts),
   youtubeList: url => call('POST', '/api/youtube-list', { url }),
+  loudness: (name, src) => call('POST', `${b(name)}/loudness`, { src }),
   files: (name, dir) => call('GET', `${b(name)}/files?dir=${encodeURIComponent(dir)}`),
   beaconSave: (name, data) => {
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });

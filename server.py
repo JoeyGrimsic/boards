@@ -21,6 +21,7 @@ Run:  python server.py            (opens your browser)
 import argparse
 import hashlib
 import json
+import math
 import mimetypes
 import os
 import re
@@ -429,6 +430,68 @@ def fetch_url_to_board(board: Path, url: str):
         raise ApiError(502, f"couldn't download: {e}")
 
 
+LOUD_TARGET = -14.0   # LUFS, roughly what YouTube / Spotify normalize to
+LOUD_PEAK = -1.0      # dBTP: never boost a song so far that its peaks clip
+LOUD_LOCK = threading.Lock()
+LOUD_SLOTS = threading.Semaphore(2)  # measuring is CPU heavy; don't run too many at once
+
+
+def measure_loudness(board: Path, src: str):
+    """How loud a song is, and the gain (dB) that brings it to the target.
+
+    Results are cached in <board>/.loudness.json so each file is only measured once.
+    The audio file itself is never changed.
+    """
+    path = board / src
+    if not within(board / "assets", path) or not path.is_file():
+        raise ApiError(404, "song not found")
+    st = path.stat()
+    key = f"{st.st_size}:{int(st.st_mtime)}"
+    cache_file = board / ".loudness.json"
+
+    def read_cache():
+        try:
+            return json.loads(cache_file.read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    with LOUD_LOCK:
+        hit = read_cache().get(src)
+    if hit and hit.get("key") == key:
+        return hit
+    ffmpeg = ffmpeg_path()
+    if not ffmpeg:
+        return {"gain": 0, "unavailable": True}
+    with LOUD_SLOTS:
+        try:
+            proc = subprocess.run(
+                [ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-vn",
+                 "-af", f"loudnorm=I={LOUD_TARGET}:TP={LOUD_PEAK}:LRA=11:print_format=json", "-f", "null", "-"],
+                capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
+            raise ApiError(504, "measuring the song timed out")
+    out = proc.stderr or ""
+    try:
+        data = json.loads(out[out.rindex("{"):out.rindex("}") + 1])
+        lufs, peak = float(data["input_i"]), float(data["input_tp"])
+    except (ValueError, KeyError):
+        raise ApiError(502, "couldn't measure that song")
+    if not math.isfinite(lufs) or lufs < -70:
+        gain = 0.0  # silence: leave it alone
+    else:
+        gain = LOUD_TARGET - lufs
+        if gain > 0 and math.isfinite(peak):
+            gain = min(gain, max(0.0, LOUD_PEAK - peak))
+        gain = max(-20.0, min(12.0, gain))
+    res = {"key": key, "lufs": round(lufs, 1) if math.isfinite(lufs) else None,
+           "peak": round(peak, 1) if math.isfinite(peak) else None, "gain": round(gain, 2)}
+    with LOUD_LOCK:
+        cache = read_cache()
+        cache[src] = res
+        atomic_write(cache_file, json.dumps(cache, indent=1).encode("utf-8"))
+    return res
+
+
 def board_summary(p: Path):
     info = {"name": p.name, "items": 0, "modified": p.stat().st_mtime, "previews": []}
     bj = p / "board.json"
@@ -721,6 +784,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(youtube_download(board, data.get("url", "").strip(),
                                                        data.get("mode", "audio"),
                                                        data.get("start"), data.get("end")), 201)
+
+            if action == "loudness" and method == "POST":
+                return self.send_json(measure_loudness(board, str(self.read_json().get("src", ""))))
 
             if action == "files" and method == "GET":
                 sub = (query.get("dir") or ["music"])[0]
