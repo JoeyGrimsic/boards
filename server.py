@@ -497,6 +497,138 @@ def measure_loudness(board: Path, src: str):
     return res
 
 
+# --------------------------------------------------------------------------- background music jobs
+# Downloads run here, not in the browser, so they keep going when the music window,
+# the board or even the app window is closed. Progress is saved in
+# <board>/.music-jobs.json; the open board polls it and adds finished songs.
+
+JOBS_LOCK = threading.RLock()
+JOBS = {}       # job id -> job dict
+WORKERS = {}    # job id -> running thread
+ACTIVE_STATES = {"queued", "listing", "downloading"}
+
+
+def _jobs_file(board: Path):
+    return board / ".music-jobs.json"
+
+
+def _save_jobs(board: Path):
+    with JOBS_LOCK:
+        mine = [j for j in JOBS.values() if j["board"] == board.name]
+        try:
+            atomic_write(_jobs_file(board), json.dumps(mine, indent=1).encode("utf-8"))
+        except OSError:
+            pass
+
+
+def _load_jobs(board: Path):
+    """Pick up jobs saved in a board folder (e.g. after a restart) and resume unfinished ones."""
+    with JOBS_LOCK:
+        try:
+            saved = json.loads(_jobs_file(board).read_text("utf-8"))
+        except (OSError, ValueError):
+            saved = []
+        for j in saved:
+            if j.get("id") and j["id"] not in JOBS:
+                j["board"] = board.name
+                JOBS[j["id"]] = j
+        for j in JOBS.values():
+            if j["board"] == board.name and j["state"] in ACTIVE_STATES and j["id"] not in WORKERS:
+                _start_worker(board, j["id"])
+
+
+def _start_worker(board: Path, jid):
+    t = threading.Thread(target=_run_job, args=(board, jid), daemon=True)
+    WORKERS[jid] = t
+    t.start()
+
+
+def _run_job(board: Path, jid):
+    job = JOBS[jid]
+    try:
+        if job["entries"] is None:
+            if job["kind"] == "playlist":
+                job["state"] = "listing"
+                _save_jobs(board)
+                lst = youtube_list(job["url"])
+                job.update(title=lst["title"], entries=lst["entries"], truncated=lst["truncated"])
+                if not lst["entries"]:
+                    raise ApiError(404, "that playlist looks empty (or it's private)")
+            else:
+                job["entries"] = [{"url": job["url"], "title": ""}]
+        job["state"] = "downloading"
+        _save_jobs(board)
+        while job["next"] < len(job["entries"]) and not job.get("stop"):
+            entry = job["entries"][job["next"]]
+            job["current"] = entry.get("title") or ""
+            _save_jobs(board)
+            try:
+                res = youtube_download(board, entry["url"], "audio")
+                job["tracks"].append({"src": res["src"], "title": res["title"]})
+            except ApiError as e:
+                job["failed"] += 1
+                job["lastError"] = e.message
+            job["next"] += 1
+        if job.get("stop"):
+            job["state"] = "stopped"
+        elif not job["tracks"]:
+            job["state"] = "error"
+            job["error"] = job.get("lastError") or "nothing could be downloaded"
+        else:
+            job["state"] = "done"
+    except ApiError as e:
+        job["state"], job["error"] = "error", e.message
+    except Exception as e:  # never leave a job stuck "running"
+        job["state"], job["error"] = "error", str(e)
+    finally:
+        job["current"] = ""
+        job["updated"] = time.time()
+        WORKERS.pop(jid, None)
+        _save_jobs(board)
+
+
+def create_job(board: Path, data):
+    url = str(data.get("url", "")).strip()
+    if not re.match(r"^https?://", url):
+        raise ApiError(400, "that doesn't look like a link")
+    if not ytdlp_cmd():
+        raise ApiError(501, "yt-dlp is not installed. Run:  pip install yt-dlp   (or put yt-dlp.exe in the tools folder)")
+    if not ffmpeg_path():
+        raise ApiError(501, "ffmpeg is not installed. Install it (winget install ffmpeg) or put ffmpeg.exe in the tools folder")
+    music = data.get("music") if isinstance(data.get("music"), dict) else {}
+    job = {
+        "id": hashlib.sha1(f"{url}{time.time()}".encode()).hexdigest()[:10],
+        "board": board.name, "url": url,
+        "kind": "playlist" if data.get("kind") == "playlist" else "song",
+        "target": data.get("target"), "music": {"radius": music.get("radius"), "volume": music.get("volume")},
+        "state": "queued", "title": "", "entries": None, "next": 0, "current": "",
+        "tracks": [], "failed": 0, "applied": 0, "error": None,
+        "created": time.time(), "updated": time.time(),
+    }
+    with JOBS_LOCK:
+        _load_jobs(board)
+        JOBS[job["id"]] = job
+        _start_worker(board, job["id"])
+    _save_jobs(board)
+    return job
+
+
+def list_jobs(board: Path):
+    _load_jobs(board)
+    with JOBS_LOCK:
+        return sorted((j for j in JOBS.values() if j["board"] == board.name), key=lambda j: j["created"])
+
+
+def resume_all_jobs():
+    """At startup: carry on with downloads that were interrupted by a restart."""
+    try:
+        for p in CONFIG.boards_dir.iterdir():
+            if p.is_dir() and (p / ".music-jobs.json").is_file():
+                _load_jobs(p)
+    except OSError:
+        pass
+
+
 def board_summary(p: Path):
     info = {"name": p.name, "items": 0, "modified": p.stat().st_mtime, "previews": []}
     bj = p / "board.json"
@@ -789,6 +921,29 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.copy2(src, dest)
                 return self.send_json({"src": rel(board, dest)})
 
+            if action == "music-jobs":
+                jid = parts[3] if len(parts) > 3 else None
+                if not jid and method == "GET":
+                    return self.send_json({"jobs": list_jobs(board)})
+                if not jid and method == "POST":
+                    return self.send_json(create_job(board, self.read_json()), 201)
+                _load_jobs(board)
+                with JOBS_LOCK:
+                    job = JOBS.get(jid)
+                    if not job or job["board"] != board.name:
+                        raise ApiError(404, "no such download")
+                    if method == "POST":
+                        data = self.read_json()
+                        if data.get("stop"):
+                            job["stop"] = True
+                        if isinstance(data.get("applied"), int):
+                            job["applied"] = max(job["applied"], min(data["applied"], len(job["tracks"])))
+                    elif method == "DELETE":
+                        job["stop"] = True
+                        JOBS.pop(jid, None)
+                _save_jobs(board)
+                return self.send_json(job)
+
             if action == "youtube" and method == "POST":
                 data = self.read_json()
                 return self.send_json(youtube_download(board, data.get("url", "").strip(),
@@ -909,6 +1064,8 @@ def main():
           f"ffmpeg: {'yes' if ffmpeg_path() else 'missing'}")
     print("  press Ctrl+C to stop\n")
 
+    threading.Thread(target=resume_all_jobs, daemon=True).start()
+
     if not args.no_browser:
         threading.Timer(0.4, open_window, args=(url, args.app)).start()
 
@@ -917,6 +1074,8 @@ def main():
         def watchdog():
             while True:
                 time.sleep(10)
+                if WORKERS:
+                    continue  # downloads still running: keep going for them
                 if time.time() - LAST_SEEN[0] > 150:
                     print("  no open windows for a while, stopping")
                     httpd.shutdown()

@@ -1,6 +1,6 @@
 // Spatial music: anything can carry a playlist that fades in when you're
 // zoomed in close to it. Only the nearest one plays.
-import { S, getItem, mutate, addItem, uid, select, removeItems } from './state.js';
+import { S, getItem, mutate, addItem, uid, select, removeItems, on, off } from './state.js';
 import { viewCenter, viewBox, flyCam, camFor } from './canvas.js';
 import { box, center, clamp, contains } from './geom.js';
 import { api, assetUrl } from './api.js';
@@ -10,6 +10,7 @@ import { esc } from './markdown.js';
 import { needTools } from './media.js';
 import { elFor, requestRender } from './render.js';
 import { trimEditor, trimLabel } from './trim.js';
+import { startJob, stopJob, jobsFor, isActive, progressText, summaryText } from './jobs.js';
 
 const ZOOM_IN = 0.45;  // need at least this much zoom before music kicks in
 const players = new Map(); // item id -> { id, audio, idx, url, vol, seek }
@@ -325,6 +326,8 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
     cls: 'music-dialog',
     docked: true,
     onClose: () => {
+      off('jobs', drawJobs);
+      off('job-tracks', onJobTracks);
       closeTrim?.();
       S.musicPreview = null;
       requestRender();
@@ -426,9 +429,9 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
     renderPlaylist();
   });
 
-  const addTrack = (t, quiet = false) => {
+  const addTrack = t => {
     prefetchGain(t.src); // measure loudness right away so it's ready to play
-    if (m.closed) return appendLive(t, quiet);
+    if (draft.tracks.some(x => x.src === t.src)) return;
     draft.tracks.push(t);
     if (openTrim < 0) return renderPlaylist();
     // a trim editor is open: add the row without rebuilding (and interrupting) it
@@ -438,111 +441,53 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
     pl.insertAdjacentHTML('beforeend', trackRow(t, i, draft.tracks.length));
   };
 
-  // songs that finish downloading after the dialog was closed still get added
-  let createdId = null; // the music spot this dialog made, if any
-  const appendLive = (t, quiet) => {
-    const live = target ? getItem(target.id) : createdId && getItem(createdId);
-    if (live) {
-      mutate(() => {
-        live.music ||= { radius: draft.radius, volume: draft.volume, tracks: [] };
-        normalizeMusic([live]);
-        live.music.tracks.push(t);
-      });
-    } else if (!target) {
-      const it = mutate(() => addItem({
-        id: uid(), type: 'music', x: Math.round(spot.x - 36), y: Math.round(spot.y - 36),
-        music: { tracks: [t], radius: draft.radius, volume: draft.volume }, tags: [],
-      }));
-      createdId = it.id;
-      select([it.id]);
-    }
-    if (!quiet) toast(`♪ added “${t.title}”`);
+  // ---- downloads run on the server as background jobs (see jobs.js), so they
+  // carry on if this window, the board or the app is closed. Songs land in the
+  // item itself; while this window is open they also show up in the list here.
+  let liveId = target?.id || null;
+  const ensureTarget = () => {
+    if (liveId && getItem(liveId)) return liveId;
+    // a new music spot: make it now so the download has somewhere to go
+    const it = mutate(() => addItem({
+      id: uid(), type: 'music', x: Math.round(spot.x - 36), y: Math.round(spot.y - 36),
+      music: { tracks: [], radius: draft.radius, volume: draft.volume }, tags: [],
+    }));
+    select([it.id]);
+    liveId = it.id;
+    return liveId;
   };
+  function onJobTracks({ itemId, tracks }) {
+    if (!m.closed && itemId === liveId) tracks.forEach(addTrack);
+  }
+  on('job-tracks', onJobTracks);
 
-  // ---- downloads: one status line per job (a song, or a whole playlist)
-  const jobs = new Map();
-  let jobSeq = 0;
-  const drawJobs = () => {
-    if (!m.closed) $('.status').innerHTML = [...jobs.values()].map(j => `<div class="job">${j.html}</div>`).join('');
-  };
-  const newJob = html => {
-    const id = ++jobSeq;
-    jobs.set(id, { html, cancelled: false });
-    drawJobs();
-    return id;
-  };
-  const setJob = (id, html) => {
-    if (!jobs.has(id)) return;
-    jobs.get(id).html = html;
-    drawJobs();
-  };
-  const endJob = (id, html, linger = 8000) => {
-    if (!html) { jobs.delete(id); drawJobs(); return; }
-    setJob(id, html);
-    setTimeout(() => { jobs.delete(id); drawJobs(); }, linger);
-  };
+  let asking = null; // "just this song or the whole playlist?" prompt
+  let lastError = '';
+  function drawJobs() {
+    if (m.closed) return;
+    const lines = jobsFor(liveId).map(j => isActive(j)
+      ? `<div class="job"><span class="spin"></span> ${esc(progressText(j))} <button class="link" data-stop="${j.id}">${j.stop ? 'stopping…' : 'stop'}</button></div>`
+      : `<div class="job ${j.state === 'error' ? 'err' : ''}">${j.state === 'error' ? '' : icon('check')} ${esc(summaryText(j))}</div>`);
+    if (asking) lines.unshift(`<div class="job">this video is part of a playlist — <button class="btn txt mini" data-pick="one">just this song</button> ` +
+      `<button class="btn txt mini primary" data-pick="all">the whole playlist</button></div>`);
+    if (lastError) lines.push(`<div class="job err">${esc(lastError)}</div>`);
+    $('.status').innerHTML = lines.join('');
+  }
+  on('jobs', drawJobs);
+  drawJobs();
 
   $('.status').addEventListener('click', e => {
     const stop = e.target.closest('[data-stop]');
-    if (stop && jobs.has(+stop.dataset.stop)) {
-      jobs.get(+stop.dataset.stop).cancelled = true;
-      stop.textContent = 'stopping after this song…';
-    }
+    if (stop) { stop.textContent = 'stopping after this song…'; stopJob(stop.dataset.stop); }
     const pick = e.target.closest('[data-pick]');
-    if (pick) jobs.get(+pick.dataset.job)?.resolve?.(pick.dataset.pick);
+    if (pick && asking) asking(pick.dataset.pick);
   });
 
   /** A link to a video inside a playlist: just that song, or all of them? */
   const ask = () => new Promise(resolve => {
-    const id = newJob('');
-    setJob(id, `this video is part of a playlist — <button class="btn txt mini" data-job="${id}" data-pick="one">just this song</button> ` +
-      `<button class="btn txt mini primary" data-job="${id}" data-pick="all">the whole playlist</button>`);
-    jobs.get(id).resolve = v => { endJob(id); resolve(v); };
+    asking = v => { asking = null; drawJobs(); resolve(v); };
+    drawJobs();
   });
-
-  const grabOne = async u => {
-    const id = newJob('<span class="spin"></span> downloading audio… (keeps going if you close this)');
-    try {
-      const res = await api.youtube(S.name, { url: u, mode: 'audio' });
-      addTrack({ src: res.src, title: res.title });
-      endJob(id);
-    } catch (e) {
-      if (m.closed) toast(e.message, 'error');
-      endJob(id, `<span class="err">${esc(e.message)}</span>`, 12000);
-    }
-  };
-
-  const grabPlaylist = async u => {
-    const id = newJob('<span class="spin"></span> reading the playlist…');
-    let list;
-    try {
-      list = await api.youtubeList(u);
-    } catch (e) {
-      if (m.closed) toast(e.message, 'error');
-      return endJob(id, `<span class="err">${esc(e.message)}</span>`, 12000);
-    }
-    const n = list.entries.length;
-    if (!n) return endJob(id, '<span class="err">that playlist looks empty (or it\'s private)</span>', 10000);
-    const job = jobs.get(id);
-    let ok = 0, failed = 0;
-    for (let k = 0; k < n && !job.cancelled; k++) {
-      const e = list.entries[k];
-      setJob(id, `<span class="spin"></span> “${esc(list.title)}” · song ${k + 1} of ${n}: ${esc(e.title || '…')} ` +
-        `<button class="link" data-stop="${id}">stop</button>`);
-      try {
-        const res = await api.youtube(S.name, { url: e.url, mode: 'audio' });
-        addTrack({ src: res.src, title: res.title }, true);
-        ok++;
-      } catch {
-        failed++; // deleted / region-locked songs: skip them
-      }
-    }
-    const summary = `added ${ok} song${ok === 1 ? '' : 's'} from “${list.title}”` +
-      (failed ? ` · ${failed} couldn't be downloaded` : '') + (job.cancelled ? ' · stopped early' : '') +
-      (list.truncated ? ` · only the first ${n} were taken` : '');
-    if (m.closed) toast(`♪ ${summary}`);
-    endJob(id, `${icon('check')} ${esc(summary)}`, 12000);
-  };
 
   const inPlaylist = u => /[?&]list=/.test(u);
   const isVideo = u => /[?&]v=|youtu\.be\/|\/shorts\//.test(u);
@@ -552,11 +497,16 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
     const links = input.value.split(/\s+/).filter(Boolean); // several links at once is fine
     if (!links.length) return input.focus();
     input.value = '';
+    lastError = '';
     for (const u of links) {
       let whole = inPlaylist(u) && !isVideo(u);
       if (!whole && inPlaylist(u)) whole = (await ask()) === 'all';
-      if (whole) grabPlaylist(u);
-      else grabOne(u);
+      try {
+        await startJob({ url: u, kind: whole ? 'playlist' : 'song', targetId: ensureTarget(), radius: draft.radius, volume: draft.volume });
+      } catch (e) {
+        lastError = e.message;
+        drawJobs();
+      }
     }
   };
   $('[name=url]').addEventListener('keydown', e => { if (e.key === 'Enter') $('[data-act=yt]').click(); });
@@ -597,14 +547,14 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
   const apply = () => {
     const music = { tracks: draft.tracks, radius: draft.radius, volume: draft.volume };
     if (draft.shuffle) music.shuffle = true;
-    const live = target && getItem(target.id);
+    const live = liveId && getItem(liveId);
+    const downloading = jobsFor(liveId).some(isActive);
     if (live) {
-      if (!draft.tracks.length) {
+      if (!draft.tracks.length && !downloading) {
         if (live.music) mutate(() => (live.type === 'music' ? removeItems([live.id]) : delete live.music));
       } else mutate(() => (live.music = music));
     } else if (!target && draft.tracks.length) {
       const it = mutate(() => addItem({ id: uid(), type: 'music', x: Math.round(spot.x - 36), y: Math.round(spot.y - 36), music, tags: [] }));
-      createdId = it.id;
       select([it.id]);
     }
   };
@@ -612,6 +562,7 @@ export async function openMusicDialog({ targetId = null, at = null, url = '' } =
   $('[data-act=cancel]').onclick = () => m.close();
   $('[data-act=ok]').onclick = () => { apply(); m.close(); };
   m.$('[data-act=remove]')?.addEventListener('click', () => {
+    jobsFor(target.id).filter(isActive).forEach(j => stopJob(j.id));
     const live = getItem(target.id);
     if (live) mutate(() => (live.type === 'music' ? removeItems([live.id]) : delete live.music));
     m.close();

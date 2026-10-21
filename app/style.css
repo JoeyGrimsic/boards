@@ -88,6 +88,9 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; backgro
 #zoom-label { min-width: 66px; font-size: 17px; }
 #save-state { font-size: 15px; color: var(--muted); padding-left: 4px; min-width: 60px; }
 #save-state[data-state="error"] { color: var(--danger); }
+#jobs-pill { height: 32px; font-size: 15px; gap: 8px; max-width: 34vw; border-color: var(--accent); color: var(--ink); }
+#jobs-pill .pl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#jobs-pill .spin { color: var(--accent); }
 .tool kbd {
   position: absolute; right: -9px; bottom: -7px; font-size: 12px; line-height: 14px; padding: 0 4px;
   background: var(--panel); border: 1.5px solid var(--ink); border-radius: 5px 4px 6px 3px; opacity: 1;
@@ -177,6 +180,18 @@ body:not(.multi) .item.selected:not(.music):not(.editing) .rh { display: block; 
 }
 .mbadge .ic { width: 66%; height: 66%; }
 .item.has-music .mbadge { display: flex; }
+/* a music download running in the background for this item */
+.dlbadge {
+  display: none; position: absolute; z-index: 3; pointer-events: none; white-space: nowrap;
+  right: calc(-10px * var(--iz)); top: calc(-14px * min(var(--iz), 6));
+  transform: translateY(-50%); align-items: center; gap: .4em;
+  font-size: calc(13px * min(var(--iz), 6)); font-weight: 600; line-height: 1;
+  padding: .35em .7em; border-radius: 1em; background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 0 0 calc(2px * min(var(--iz), 6)) var(--bg);
+}
+.dlbadge .spin { width: .85em; height: .85em; border-width: .17em; }
+.item.downloading .dlbadge { display: flex; }
+.item.music.downloading .body { animation: pulse 1.4s ease-in-out infinite; }
 .item.has-music.playing .mbadge { animation: pulse 1.1s ease-in-out infinite; }
 
 /* tags, inline and as pills */
@@ -469,6 +484,7 @@ select.input { cursor: pointer; }
 .status .ic { width: 18px; height: 18px; color: var(--accent); }
 .status { flex-direction: column; align-items: stretch; }
 .status .job { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 0; }
+.status .job.err { color: var(--danger); }
 .status .btn.txt.mini { padding: 0 10px; font-size: 15px; }
 .status .link { font-size: 15px; }
 .err { color: var(--danger); }

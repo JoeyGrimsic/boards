@@ -9,7 +9,7 @@ An infinite, doodle-style brainstorming canvas that keeps everything in plain fo
 - **#tags**: type `#` and existing tags are suggested (Tab accepts, keep typing to ignore). Things that share a tag get tied together by faint threads. Hover a tag to light them up, or click it to focus.
 - **Center pieces**: mark the main things on a board (P) and give them titles. ← / → hop between them left to right and loop around. A bar at the top shows the one you're on and what's to its left and right.
 - **Arrows** between things.
-- **Spatial music**: give any item a playlist from YouTube links (single songs or whole YouTube playlists), or from your own audio files. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. Songs are normalized, so they all play at about the same loudness (the files themselves aren't changed). The speaker button has a global volume slider and the normalization switch.
+- **Spatial music**: give any item a playlist from YouTube links (single songs or whole YouTube playlists), or from your own audio files. Downloads run in the background: close the music window, switch boards or even close the app, and they keep going. A badge on the item and a pill at the top show progress. YouTube songs are saved as mp3s named after the video. A playlist loops while you're zoomed in nearby, and moving to another music spot crossfades. You can trim each song's start and end on a waveform. Songs are normalized, so they all play at about the same loudness (the files themselves aren't changed). The speaker button has a global volume slider and the normalization switch.
 - Themes: cream with hot pink, blue or red (shift+T).
 
 ## Start it
@@ -64,6 +64,7 @@ boards/
     board.json        everything on the canvas (human-readable JSON)
     board.json.bak    rolling backup, refreshed every ~5 minutes
     .loudness.json    measured song loudness, so each song is only measured once
+    .music-jobs.json  music downloads in progress (resumed if the app restarts)
     assets/
       images/         pasted & dropped images
       video/          video files and YouTube clips

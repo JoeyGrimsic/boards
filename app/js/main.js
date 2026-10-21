@@ -10,6 +10,7 @@ import { showHome } from './home.js';
 import { toast } from './ui.js';
 import { endEdit } from './text.js';
 import { resetPieces } from './centers.js';
+import { resetJobs } from './jobs.js';
 import './interact.js';
 
 const boardEl = document.getElementById('board');
@@ -27,6 +28,7 @@ async function closeBoard() {
   clearAll();
   togglePanel(false);
   boardEl.hidden = true;
+  resetJobs();
 }
 
 async function openBoard(name) {
@@ -70,6 +72,7 @@ async function openBoard(name) {
   emit('selection');
   emit('savestate', 'saved');
   resetPieces();
+  resetJobs(); // pick up background music downloads for this board
   // handwriting fonts change text heights once they load
   document.fonts?.ready.then(() => invalidate());
 }

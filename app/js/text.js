@@ -57,7 +57,8 @@ export function endEdit() {
   ta = null;
   if (it) {
     it.text = (it.text || '').replace(/\s+$/, '');
-    if (!it.text.trim()) removeItems([id]);
+    // an empty plain text box would be invisible, so drop it; a sticky note stays
+    if (!it.text.trim() && !it.bg) removeItems([id]);
   }
   if (before) pushUndo(before);
   before = null;

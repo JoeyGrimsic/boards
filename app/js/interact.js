@@ -52,7 +52,8 @@ vp.addEventListener('pointerdown', e => {
   } else if (e.button !== 0) {
     return;
   } else {
-    if (S.editing && id === S.editing) return;
+    // pressing on the item you're typing in (but outside the text itself) stops
+    // typing and drags it, same as any other item
     if (S.editing) endEdit();
     const it = id && getItem(id);
     if (it && e.target.dataset.handle === 'resize') {

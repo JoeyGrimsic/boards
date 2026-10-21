@@ -6,6 +6,7 @@ import { itemTags, tagColor, threadEdges } from './tags.js';
 import { renderMarkdown, esc } from './markdown.js';
 import { assetUrl } from './api.js';
 import { musicLabel, getMaster } from './music.js';
+import { activeJobFor } from './jobs.js';
 
 export const FONTS = {
   round: "'Fredoka', 'Nunito', system-ui, sans-serif",
@@ -116,7 +117,7 @@ function create(it) {
   else if (it.type === 'music')
     body = `<div class="mn">${icon('music')}</div><div class="mlabel"></div>`;
   el.innerHTML = `<div class="ctitle" title="center piece — double-click to rename"></div><div class="body">${body}</div><div class="pills"></div>` +
-    `<div class="mbadge" title="has music">${icon('music')}</div><div class="rh" data-handle="resize"></div>`;
+    `<div class="mbadge" title="has music">${icon('music')}</div><div class="dlbadge" title="downloading music in the background"></div><div class="rh" data-handle="resize"></div>`;
   if (it.type === 'video') wireVideo(el);
   if (it.type === 'image') {
     const img = el.querySelector('img');
@@ -215,6 +216,15 @@ function decorate() {
     el.classList.toggle('dim', !!S.focusTag && !tags.has(S.focusTag));
     el.classList.toggle('hot', !!S.hoverTag && tags.has(S.hoverTag));
     el.classList.toggle('match', S.matches.has(it.id));
+    // background music download for this item: show its progress right on it
+    const job = activeJobFor(it.id);
+    el.classList.toggle('downloading', !!job);
+    if (job) {
+      const total = job.entries?.length || 0;
+      const text = job.kind === 'playlist' && total ? `${Math.min(job.next + 1, total)}/${total}` : 'downloading';
+      const badge = el.querySelector('.dlbadge');
+      if (badge._t !== text) { badge._t = text; badge.innerHTML = `<span class="spin"></span>${text}`; }
+    }
   }
 }
 

@@ -20,6 +20,7 @@ export const S = {
 // ---------------------------------------------------------------- events
 const listeners = {};
 export const on = (evt, fn) => (listeners[evt] ||= []).push(fn);
+export const off = (evt, fn) => { listeners[evt] = (listeners[evt] || []).filter(f => f !== fn); };
 export const emit = (evt, data) => (listeners[evt] || []).forEach(fn => fn(data));
 
 // ---------------------------------------------------------------- items
