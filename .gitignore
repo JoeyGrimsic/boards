@@ -3,3 +3,4 @@ config.json
 tools/*
 !tools/README.txt
 __pycache__/
+doodleboard.log

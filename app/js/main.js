@@ -94,5 +94,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveNow();
 });
 
+// tell the server a window is still open (it quits a while after the last one closes)
+setInterval(() => fetch('/api/ping', { method: 'POST' }).catch(() => {}), 30000);
+
 initChrome();
 route();

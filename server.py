@@ -42,6 +42,10 @@ APP_DIR = ROOT / "app"
 TOOLS_DIR = ROOT / "tools"          # optional: drop yt-dlp(.exe) / ffmpeg(.exe) here
 CONFIG_FILE = ROOT / "config.json"
 
+# don't flash a console window for ffmpeg / yt-dlp when running without one (pythonw)
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+LAST_SEEN = [time.time()]  # last request from an open app window (see --background)
+
 MAX_UPLOAD = 2 * 1024 ** 3          # 2 GB
 MAX_FETCH = 200 * 1024 ** 2         # 200 MB for images fetched from the web
 
@@ -274,7 +278,7 @@ def youtube_list(url: str):
     args = cmd + ["--flat-playlist", "--yes-playlist", "-J", "--no-warnings",
                   "--playlist-end", str(MAX_PLAYLIST), url]
     try:
-        proc = subprocess.run(args, capture_output=True, text=True, timeout=180,
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=180, creationflags=NO_WINDOW,
                               encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         raise ApiError(504, "reading the playlist timed out")
@@ -338,7 +342,7 @@ def youtube_download(board: Path, url: str, mode: str, start=None, end=None):
     with YT_LOCK:
         existing = set(folder.iterdir())
         try:
-            proc = subprocess.run(args, capture_output=True, text=True, timeout=900,
+            proc = subprocess.run(args, capture_output=True, text=True, timeout=900, creationflags=NO_WINDOW,
                                   encoding="utf-8", errors="replace")
         except subprocess.TimeoutExpired:
             proc = None
@@ -467,7 +471,8 @@ def measure_loudness(board: Path, src: str):
             proc = subprocess.run(
                 [ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-vn",
                  "-af", f"loudnorm=I={LOUD_TARGET}:TP={LOUD_PEAK}:LRA=11:print_format=json", "-f", "null", "-"],
-                capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
+                capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace",
+                creationflags=NO_WINDOW)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "measuring the song timed out")
     out = proc.stderr or ""
@@ -570,6 +575,7 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         try:
             if path.startswith("/api/"):
+                LAST_SEEN[0] = time.time()
                 self.route_api(method, path[5:].strip("/"), query)
             elif path.startswith("/boards/") and method in ("GET", "HEAD"):
                 rest = path[len("/boards/"):]
@@ -668,8 +674,12 @@ class Handler(BaseHTTPRequestHandler):
     def route_api(self, method, path, query):
         parts = [p for p in path.split("/") if p]
 
+        if parts == ["ping"]:
+            return self.send_json({"ok": True})
+
         if parts == ["info"] and method == "GET":
             return self.send_json({
+                "app": "doodleboard",
                 "boardsDir": str(CONFIG.boards_dir.resolve()),
                 "ytdlp": bool(ytdlp_cmd()),
                 "ffmpeg": bool(ffmpeg_path()),
@@ -828,6 +838,31 @@ def find_app_browser():
     return None
 
 
+class Server(ThreadingHTTPServer):
+    # On Windows, SO_REUSEADDR would let a second copy quietly share a port
+    # that's already in use, so we couldn't notice the first one is running.
+    allow_reuse_address = not sys.platform.startswith("win")
+
+
+def open_window(url, app_mode):
+    exe = find_app_browser() if app_mode else None
+    if exe:
+        subprocess.Popen([exe, f"--app={url}", "--new-window"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        webbrowser.open(url)
+
+
+def already_running(port):
+    """Is a doodleboard server already answering on this port?"""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # never via a proxy
+    try:
+        with opener.open(f"http://127.0.0.1:{port}/api/info", timeout=1.5) as r:
+            return json.loads(r.read()).get("app") == "doodleboard"
+    except Exception:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser(description="doodleboard local server")
     ap.add_argument("--port", type=int, default=7777)
@@ -835,7 +870,14 @@ def main():
     ap.add_argument("--boards", help="folder that holds your boards (remembered in config.json)")
     ap.add_argument("--app", action="store_true", help="open in a chromeless Edge/Chrome app window")
     ap.add_argument("--no-browser", action="store_true", help="don't open anything")
+    ap.add_argument("--background", action="store_true",
+                    help="no console: log to doodleboard.log and quit a few minutes after the last window closes")
     args = ap.parse_args()
+
+    if args.background or sys.stdout is None:  # pythonw has no console to print to
+        log = open(ROOT / "doodleboard.log", "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = log
+        print(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     CONFIG.load()
     if args.boards:
@@ -846,10 +888,15 @@ def main():
     httpd = None
     for port in range(args.port, args.port + 20):
         try:
-            httpd = ThreadingHTTPServer((args.host, port), Handler)
+            httpd = Server((args.host, port), Handler)
             break
         except OSError:
-            continue
+            if already_running(port):
+                # one copy is enough: just open another window onto it
+                print(f"  doodleboard is already running on port {port}")
+                if not args.no_browser:
+                    open_window(f"http://localhost:{port}/", args.app)
+                return
     if not httpd:
         sys.exit("couldn't find a free port")
     httpd.bind_host = args.host
@@ -863,15 +910,18 @@ def main():
     print("  press Ctrl+C to stop\n")
 
     if not args.no_browser:
-        def launch():
-            time.sleep(0.4)
-            exe = find_app_browser() if args.app else None
-            if exe:
-                subprocess.Popen([exe, f"--app={url}", "--new-window"],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                webbrowser.open(url)
-        threading.Thread(target=launch, daemon=True).start()
+        threading.Timer(0.4, open_window, args=(url, args.app)).start()
+
+    if args.background:
+        # open windows ping every 30s; once they've all been closed for a while, quit
+        def watchdog():
+            while True:
+                time.sleep(10)
+                if time.time() - LAST_SEEN[0] > 150:
+                    print("  no open windows for a while, stopping")
+                    httpd.shutdown()
+                    return
+        threading.Thread(target=watchdog, daemon=True).start()
 
     try:
         httpd.serve_forever()

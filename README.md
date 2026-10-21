@@ -24,6 +24,14 @@ You need **Python 3.9+**. Nothing else is required for the basic app.
 
 It opens in its own window if Edge or Chrome is installed (`--app` mode), otherwise in your browser at `http://localhost:7777`. Leave the console window open while you work, and close it to stop.
 
+### Open it from the Start menu (Windows)
+
+Double-click **`install-shortcut.bat`** once. It adds a **Boards** shortcut to your Start menu (and, if you want, your desktop), so you can press the Windows key, type `boards`, and press Enter.
+
+Opened this way, it runs quietly in the background with no console window. Opening it again while it's running just opens another window. It stops by itself a couple of minutes after you close the last window, and its messages go to `doodleboard.log`. To remove the shortcuts, run `install-shortcut.bat remove`.
+
+If you move the doodleboard folder, run `install-shortcut.bat` again so the shortcut points to the new place.
+
 ### For YouTube → mp3 / clips (optional)
 
 ```
