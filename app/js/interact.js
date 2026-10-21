@@ -284,6 +284,15 @@ addEventListener('keydown', e => {
   }
   if (e.altKey) return;
 
+  // a text box or note is selected: typing a character just starts writing in it
+  const only = S.sel.size === 1 ? getItem([...S.sel][0]) : null;
+  if (only?.type === 'text' && k.length === 1 && k !== ' ') {
+    e.preventDefault();
+    startEdit(only.id);
+    document.execCommand('insertText', false, k); // lands at the end, goes through the editor
+    return;
+  }
+
   const byKey = {
     Escape: () => {
       if (!document.getElementById('searchbox').hidden) closeSearch();

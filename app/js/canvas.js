@@ -1,5 +1,5 @@
 // Camera: pan, zoom, fly-to and the dot grid.
-import { S, emit, scheduleSave } from './state.js';
+import { S, emit, on, scheduleSave } from './state.js';
 import { box, union, clamp } from './geom.js';
 
 export const MIN_Z = 0.03;
@@ -10,8 +10,15 @@ export const world = document.getElementById('world');
 
 let flying = null;
 
+let settle = null;
+
 export function applyCamera(save = true) {
   const { x, y, z } = S.cam;
+  // while the camera moves, slide the board around as one finished picture
+  // instead of redrawing everything every frame; redraw it crisp once it stops
+  world.classList.add('moving');
+  clearTimeout(settle);
+  settle = setTimeout(() => world.classList.remove('moving'), 160);
   world.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
   world.style.setProperty('--iz', 1 / z);
   drawGrid();
@@ -19,11 +26,37 @@ export function applyCamera(save = true) {
   if (save) scheduleSave(1500);
 }
 
+// One dot per tile, drawn as a tiny SVG image: tiling an image is far cheaper
+// to redraw than a CSS radial-gradient. Kept per tile size so the dots stay
+// the same size on screen as you zoom.
+const dotTiles = new Map();
+let dotColor = '';
+
+function dotTile(s) {
+  const key = Math.round(s);
+  if (!dotTiles.has(key)) {
+    const r = (1.3 / key) * 100; // ~1.3px dot whatever the tile size
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${r.toFixed(2)}' fill='${dotColor}'/></svg>`;
+    dotTiles.set(key, `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
+  }
+  return dotTiles.get(key);
+}
+
+on('theme', () => {
+  dotColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim();
+  dotTiles.clear();
+  drawGrid();
+});
+
+let lastTile = '';
 function drawGrid() {
   const { x, y, z } = S.cam;
   let s = 32 * z;
   while (s < 18) s *= 4;
   while (s > 90) s /= 4;
+  if (!dotColor) dotColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim();
+  const tile = dotTile(s);
+  if (tile !== lastTile) { vp.style.backgroundImage = tile; lastTile = tile; }
   vp.style.backgroundSize = `${s}px ${s}px`;
   vp.style.backgroundPosition = `${x - s / 2}px ${y - s / 2}px`;
 }

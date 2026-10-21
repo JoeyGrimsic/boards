@@ -99,10 +99,11 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; backgro
 .tool:hover kbd { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 /* ================================================================ canvas */
+/* the dot grid is a tiny tiled image made in canvas.js (much cheaper to
+   redraw than a CSS gradient when panning or when GIFs animate on top) */
 #viewport {
   position: fixed; inset: 0; overflow: hidden; touch-action: none;
   background-color: var(--bg);
-  background-image: radial-gradient(circle, var(--grid) 1.1px, transparent 1.7px);
 }
 #viewport.grab { cursor: grab; }
 #viewport.panning { cursor: grabbing; }
@@ -110,6 +111,7 @@ body.arrow-mode #viewport { cursor: crosshair; }
 body.arrow-mode .item { cursor: crosshair !important; }
 #viewport.drop { outline: 3px dashed var(--accent); outline-offset: -14px; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; --iz: 1; }
+#world.moving { will-change: transform; }
 #items { position: absolute; left: 0; top: 0; }
 #links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 
@@ -266,6 +268,7 @@ button.pill { cursor: pointer; font-size: 17px; }
 .item.editing .content { display: none; }
 
 /* ---- image */
+.item.image .poster { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 3px; }
 .item.image img {
   width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 3px;
   -webkit-user-drag: none; box-shadow: 0 2px 0 rgba(0, 0, 0, .06);

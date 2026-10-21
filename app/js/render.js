@@ -7,6 +7,7 @@ import { renderMarkdown, esc } from './markdown.js';
 import { assetUrl } from './api.js';
 import { musicLabel, getMaster } from './music.js';
 import { activeJobFor } from './jobs.js';
+import { isAnimated, track, untrack, untrackAll } from './anim.js';
 
 export const FONTS = {
   round: "'Fredoka', 'Nunito', system-ui, sans-serif",
@@ -57,6 +58,7 @@ export function invalidate() {
 }
 
 export function clearAll() {
+  untrackAll();
   for (const el of els.values()) el.remove();
   els.clear();
   S.measured.clear();
@@ -83,6 +85,7 @@ export function renderNow() {
   for (const [id, el] of els) {
     if (!live.has(id)) {
       el.querySelector('video')?.pause();
+      untrack(id);
       el.remove();
       els.delete(id);
       S.measured.delete(id);
@@ -111,7 +114,7 @@ function create(it) {
   el._type = it.type;
   let body = '';
   if (it.type === 'text') body = '<div class="content"></div>';
-  else if (it.type === 'image') body = '<img draggable="false" alt="">';
+  else if (it.type === 'image') body = '<img draggable="false" alt=""><img class="poster" draggable="false" alt="" hidden>';
   else if (it.type === 'video')
     body = '<video muted loop playsinline preload="metadata"></video><div class="vplay">' + icon('play') + '</div><div class="vbar"><i></i><b class="vin"></b><b class="vout"></b></div>';
   else if (it.type === 'music')
@@ -120,7 +123,7 @@ function create(it) {
     `<div class="mbadge" title="has music">${icon('music')}</div><div class="dlbadge" title="downloading music in the background"></div><div class="rh" data-handle="resize"></div>`;
   if (it.type === 'video') wireVideo(el);
   if (it.type === 'image') {
-    const img = el.querySelector('img');
+    const img = el.querySelector('img:not(.poster)');
     img.addEventListener('error', () => el.classList.add('broken'));
     img.addEventListener('load', () => el.classList.remove('broken'));
   }
@@ -153,9 +156,11 @@ function update(el, it) {
   } else if (it.type === 'image') {
     s.width = it.w + 'px';
     s.height = it.h + 'px';
-    const img = el.querySelector('img');
+    const img = el.querySelector('img:not(.poster)');
     const url = assetUrl(S.name, it.src);
-    if (img._src !== url) { img.src = url; img._src = url; }
+    // GIFs are loaded / paused by anim.js so only the visible ones animate
+    if (isAnimated(it.src)) track(el, it.id, url);
+    else if (img._src !== url) { img.src = url; img._src = url; }
   } else if (it.type === 'video') {
     s.width = it.w + 'px';
     s.height = it.h + 'px';

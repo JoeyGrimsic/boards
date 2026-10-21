@@ -84,12 +84,16 @@ Press **`?`** in the app for the full list. The essentials:
 | `H` | heading | `A` / alt+drag | arrow | `0` · fit all / selection |
 | `N` | sticky note | `G` | map of center pieces & tags | `1` · 100% |
 | `M` | music / playlist | `L` | tag threads on/off | `←` `→` · previous / next center piece |
-| `I` | image / video file | `F` | next font | shift+drag · box select |
+| `I` | image / video file | `alt+F` | next font | shift+drag · box select |
 | `V` | YouTube clip | `[` `]` | smaller / bigger | space+drag · pan anywhere |
-| ctrl+V | paste anything | `C` | next color | `/` · search |
+| ctrl+V | paste anything | type | write in the selected note | `/` · search |
 | | | | | ctrl+arrows · nudge selection |
 
 While typing: `Esc` finishes, `Tab` accepts a tag suggestion (otherwise `Tab` / `shift+Tab`, or `ctrl+]` / `ctrl+[`, indent and outdent the paragraph, like Google Docs), `ctrl+B` / `ctrl+I` for bold / italic, alt+F changes font, `ctrl+shift+>` / `<` resizes. Lines starting with `- `, `[ ] ` or `# ` become bullets, checkboxes and headings. Indented bullets change shape by level (● ○ ■). Drag a text box's corner to change its width, or shift+drag the corner to scale the font.
+
+## Lots of GIFs
+
+Add as many GIFs as you like. Only the ones on screen and big enough to see actually animate, up to 16 at once with the biggest first. The rest show a still frame until you get close, so the board stays smooth however many it holds.
 
 ## Web app or desktop app?
 

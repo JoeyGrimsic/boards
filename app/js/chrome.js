@@ -185,7 +185,7 @@ function buildSeltools() {
   let h = '';
   const text = items.find(i => i.type === 'text');
   if (text) {
-    h += `<button class="btn txt font" data-cmd="font" title="font (F, or alt+F while typing)">${icon('font')}<span>${FONT_LABEL[text.font] || 'rounded'}</span></button>`;
+    h += `<button class="btn txt font" data-cmd="font" title="font (alt+F)">${icon('font')}<span>${FONT_LABEL[text.font] || 'rounded'}</span></button>`;
   }
   if (text || types.has('image') || types.has('video')) {
     h += B('smaller', 'smaller ( [ )', '<b class="t">A−</b>') + B('bigger', 'bigger ( ] )', '<b class="t">A+</b>');
@@ -680,10 +680,11 @@ export function showHelp() {
     </table><table>
       <tr><th colspan="2">text</th></tr>
       ${k('enter', 'edit selected text')}${k('esc', 'stop editing')}
-      ${k('F', 'next font (alt+F while typing)')}
-      ${k('[ ]', 'smaller / bigger (ctrl+shift+&lt; &gt; while typing)')}
+      ${k('just_type', 'with a text box or note selected, starts writing in it')}
+      ${k('alt+F', 'next font')}
+      ${k('ctrl+shift+&lt; ctrl+shift+&gt;', 'smaller / bigger text')}
       ${k('tab shift+tab', 'indent / outdent (or ctrl+] ctrl+[)')}
-      ${k('C', 'next color')}
+      ${k('[ ]', 'smaller / bigger images &amp; videos')}
       ${k('ctrl+B ctrl+I', 'bold / italic')}
       <tr><td colspan="2">start a line with <code>- </code> bullet · <code>[ ] </code> checkbox · <code># </code> big heading · tab on a bullet nests it</td></tr>
       <tr><th colspan="2">move around</th></tr>

@@ -4,6 +4,7 @@ import { icon, hydrateIcons, scribble, rng } from './doodle.js';
 import { esc } from './markdown.js';
 import { toast, promptText, confirmBox, cycleTheme } from './ui.js';
 import { welcomeBoard } from './welcome.js';
+import { isAnimated } from './anim.js';
 
 const home = document.getElementById('home');
 
@@ -64,6 +65,20 @@ export async function showHome() {
       <button class="link" data-act="folder">use a different folder…</button></footer>
   </div>`;
   hydrateIcons(home);
+  // GIF previews on the board cards: show a still frame instead of animating
+  home.querySelectorAll('.cover img').forEach(img => {
+    if (!isAnimated(img.src)) return;
+    img.addEventListener('load', () => {
+      const cv = document.createElement('canvas');
+      const s = Math.min(1, 360 / Math.max(img.naturalWidth, img.naturalHeight));
+      cv.width = Math.max(1, Math.round(img.naturalWidth * s));
+      cv.height = Math.max(1, Math.round(img.naturalHeight * s));
+      try {
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        img.src = cv.toDataURL('image/webp', 0.9);
+      } catch { /* keep it as is */ }
+    }, { once: true });
+  });
 }
 
 home.addEventListener('click', async e => {
