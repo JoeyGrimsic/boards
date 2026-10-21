@@ -30,7 +30,7 @@ export function createText(p = spot(), opts = {}) {
   const before = snap();
   const it = addItem({
     id: uid(), type: 'text', x: R(p.x - 10), y: R(p.y - 20), w: 300, h: 0,
-    text: '', font: 'print', size: 24, color: 'ink', bg: null, ...opts,
+    text: '', font: 'round', size: 24, color: 'ink', bg: null, ...opts,
   });
   changed();
   startEdit(it.id, { undoBase: before });
@@ -38,11 +38,11 @@ export function createText(p = spot(), opts = {}) {
 }
 
 export const createHeading = (p = spot()) =>
-  createText({ x: p.x, y: p.y - 20 }, { font: 'marker', size: 60, w: 640 });
+  createText({ x: p.x, y: p.y - 20 }, { font: 'chunky', size: 60, w: 640 });
 
 export const createNote = (p = spot()) =>
   createText({ x: p.x - 110, y: p.y - 80 }, {
-    font: 'hand', size: 30, w: 240, h: 200, bg: { blue: 'sky', red: 'peach' }[theme()] || 'pink',
+    font: 'round', size: 24, w: 240, h: 200, bg: { blue: 'sky', red: 'peach' }[theme()] || 'pink',
   });
 
 export function addArrow(from, to) {

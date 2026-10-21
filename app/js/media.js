@@ -115,7 +115,7 @@ function addTextItem(text, p) {
   const w = Math.min(560, Math.max(200, longest * 11));
   const it = mutate(() => addItem({
     id: uid(), type: 'text', x: R(p.x - w / 2), y: R(p.y - 20), w, h: 0,
-    text, font: 'print', size: 24, color: 'ink', bg: null,
+    text, font: 'round', size: 24, color: 'ink', bg: null,
   }));
   select([it.id]);
 }

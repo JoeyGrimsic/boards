@@ -22,7 +22,7 @@ function card(b) {
   const previews = b.previews.map((src, i) =>
     `<img src="${assetUrl(b.name, src)}" style="--r:${((r() - 0.5) * 14).toFixed(1)}deg;--i:${i}" loading="lazy" alt="">`).join('');
   const snippets = !b.previews.length && b.snippets?.length
-    ? `<div class="snips">${b.snippets.map(s => `<p>${esc(s)}</p>`).join('')}</div>` : '';
+    ? `<div class="snips">${b.snippets.map(s => `<p>${esc(s.replace(/\*\*|__|~~|`|^#{1,3} /g, ''))}</p>`).join('')}</div>` : '';
   return `<div class="card sketch" style="--tilt:${tilt}deg" data-name="${esc(b.name)}">
     <a href="#/b/${encodeURIComponent(b.name)}" class="cover">${previews || snippets || `<span class="emptyc">${icon('sparkle')}</span>`}</a>
     <div class="meta"><a href="#/b/${encodeURIComponent(b.name)}" class="nm">${esc(b.name)}</a>

@@ -185,7 +185,7 @@ function buildSeltools() {
   let h = '';
   const text = items.find(i => i.type === 'text');
   if (text) {
-    h += `<button class="btn txt font" data-cmd="font" title="font (F, or alt+F while typing)">${icon('font')}<span>${FONT_LABEL[text.font] || 'print'}</span></button>`;
+    h += `<button class="btn txt font" data-cmd="font" title="font (F, or alt+F while typing)">${icon('font')}<span>${FONT_LABEL[text.font] || 'rounded'}</span></button>`;
   }
   if (text || types.has('image') || types.has('video')) {
     h += B('smaller', 'smaller ( [ )', '<b class="t">A−</b>') + B('bigger', 'bigger ( ] )', '<b class="t">A+</b>');

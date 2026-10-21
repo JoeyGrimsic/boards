@@ -52,7 +52,9 @@ export function modal({ title, body, cls = '', onClose, docked = false }) {
     e.stopPropagation();
     if (e.key === 'Escape') m.close();
   });
-  requestAnimationFrame(() => (back.querySelector('[autofocus]') || back.querySelector('input,select,button:not(.x)'))?.focus());
+  // focus something inside so Esc reaches the dialog (the dialog itself if it has no controls)
+  m.el.tabIndex = -1;
+  requestAnimationFrame(() => (back.querySelector('[autofocus]') || back.querySelector('input,select,button:not(.x)') || m.el).focus());
   return m;
 }
 

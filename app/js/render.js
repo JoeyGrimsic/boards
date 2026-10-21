@@ -8,6 +8,8 @@ import { assetUrl } from './api.js';
 import { musicLabel, getMaster } from './music.js';
 
 export const FONTS = {
+  round: "'Fredoka', 'Nunito', system-ui, sans-serif",
+  chunky: "'Fredoka', 'Nunito', system-ui, sans-serif",
   print: "'Patrick Hand', 'Comic Sans MS', cursive",
   hand: "'Caveat', 'Segoe Print', cursive",
   marker: "'Permanent Marker', 'Comic Sans MS', cursive",
@@ -15,8 +17,10 @@ export const FONTS = {
   serif: "Georgia, 'Times New Roman', serif",
   mono: "ui-monospace, Consolas, 'Cascadia Mono', monospace",
 };
-export const FONT_ORDER = ['print', 'hand', 'marker', 'sans', 'serif', 'mono'];
-export const FONT_LABEL = { print: 'print', hand: 'scrawl', marker: 'marker', sans: 'clean', serif: 'serif', mono: 'mono' };
+export const FONT_ORDER = ['round', 'chunky', 'print', 'hand', 'marker', 'sans', 'serif', 'mono'];
+// round and chunky are the same typeface (Fredoka) at different weights
+const FONT_WEIGHT = { round: 500, chunky: 700 };
+export const FONT_LABEL = { round: 'rounded', chunky: 'chunky', print: 'print', hand: 'scrawl', marker: 'marker', sans: 'clean', serif: 'serif', mono: 'mono' };
 
 export const INKS = {
   ink: 'var(--item-ink, var(--ink))', pink: '#ff2e93', red: '#e03131', orange: '#f08c00',
@@ -135,7 +139,8 @@ function update(el, it) {
     s.width = it.w + 'px';
     s.minHeight = it.h ? it.h + 'px' : '';
     s.setProperty('--fs', (it.size || 24) + 'px');
-    s.setProperty('--ff', FONTS[it.font] || FONTS.print);
+    s.setProperty('--ff', FONTS[it.font] || FONTS.round);
+    s.setProperty('--fw', FONT_WEIGHT[it.font] || 400);
     s.setProperty('--fc', INKS[it.color] || INKS.ink);
     s.setProperty('--paper', it.bg ? PAPERS[it.bg] || PAPERS.paper : 'transparent');
     s.setProperty('--rot', it.bg ? ((rng(it.id)() - 0.5) * 2.4).toFixed(2) + 'deg' : '0deg');
