@@ -1,143 +1,168 @@
-// Keeps boards smooth no matter how many GIFs they hold. Only GIFs that are on
-// screen and big enough to see actually animate (largest first, up to a
-// budget); every other one shows a still frame grabbed from itself, and its
-// animation is unloaded so the browser stops decoding it. Still frames are
-// kept as small ordinary images (painting <canvas> elements is much slower).
+// Images at the right level of detail, so a board can hold any number of them.
+//
+// Every image gets a small preview (made once, off the main thread, and saved
+// in the board's .thumbs folder so it's never made again). An image that's
+// small on screen shows its preview; one that's big shows the original. GIFs
+// only animate while visible and big enough, the biggest first, up to a budget;
+// the rest show their preview. Originals that were loaded stay loaded (just
+// hidden), so zooming back and forth never re-downloads or re-decodes them.
 import { S, on, getItem } from './state.js';
-import { viewBox } from './canvas.js';
+import { viewBox, isMoving } from './canvas.js';
 import { box, intersects } from './geom.js';
+import { api, assetUrl } from './api.js';
+import { hash } from './doodle.js';
 
-const BUDGET = 16;       // most GIFs animating at the same time
-const MIN_PX = 56;       // smaller than this on screen and a still frame looks the same
-const POSTER_MAX = 480;  // still frames are kept at most this big
-const MAX_LOADS = 4;     // GIFs loading at once just to grab their still frame
+const BUDGET = 16;   // most GIFs animating at the same time
+const MIN_PX = 56;   // a GIF smaller than this on screen doesn't need to move
+const THUMB = 384;   // preview size (longest side)
+const MAKERS = 2;    // previews being made at once
 
 export const isAnimated = src => /\.(gif|webp)(\?|#|$)/i.test(src || '');
 
-const tracked = new Map(); // item id -> { img, cv, url, poster, want, loading }
+const thumbFile = src => hash(src).toString(16).padStart(8, '0') + '.webp';
 
-/** Called by the renderer for every animated image item. */
-export function track(el, id, url) {
-  let st = tracked.get(id);
-  if (st && st.url === url && st.img === el.querySelector('img:not(.poster)')) return;
-  st = { id, img: el.querySelector('img:not(.poster)'), cv: el.querySelector('img.poster'), url, poster: false, want: 'off', loading: false };
-  tracked.set(id, st);
-  st.img.onload = () => loaded(st);
-  st.img.onerror = () => { st.loading = false; };
-  drop(st);
+const tracked = new Map(); // item id -> state
+
+/** Called by the renderer whenever an image item is created or its file changes. */
+export function trackImage(el, it) {
+  const prev = tracked.get(it.id);
+  if (prev && prev.el === el && prev.src === it.src) return;
+  const st = {
+    id: it.id, el, src: it.src, url: assetUrl(S.name, it.src), gif: isAnimated(it.src),
+    full: el.querySelector('img.full'), thumb: el.querySelector('img.thumb'),
+    thumbState: 'unknown', // unknown -> ok | missing -> making -> ok | failed
+    want: 'off', lod: null,
+  };
+  tracked.set(it.id, st);
+  st.full.removeAttribute('src');
+  st.thumb.removeAttribute('src');
+  st.thumb.onload = () => { st.thumbState = 'ok'; schedule(); };
+  st.thumb.onerror = () => {
+    if (st.thumbState === 'unknown') { st.thumbState = 'missing'; queueMake(st); }
+    schedule();
+  };
   schedule();
 }
 
 export function untrack(id) {
-  const st = tracked.get(id);
-  if (st) drop(st);
   tracked.delete(id);
 }
 
 export function untrackAll() {
-  for (const id of [...tracked.keys()]) untrack(id);
+  tracked.clear();
+  queue.length = 0;
 }
 
-/** Show / hide without touching the page when nothing changes. */
-const vis = (el, on) => { if (el.hidden === on) el.hidden = !on; };
-
-function drop(st) {
-  st.img.onload = st.img.onerror = null;
-  st.img.removeAttribute('src');
-  st.img.onload = () => loaded(st);
-  st.img.onerror = () => { st.loading = false; };
-  st.loading = false;
-}
-
-function grabPoster(st) {
-  const { naturalWidth: w, naturalHeight: h } = st.img;
-  if (!w || !h) return;
-  const s = Math.min(1, POSTER_MAX / Math.max(w, h));
-  const cv = document.createElement('canvas');
-  cv.width = Math.max(1, Math.round(w * s));
-  cv.height = Math.max(1, Math.round(h * s));
-  try {
-    cv.getContext('2d').drawImage(st.img, 0, 0, cv.width, cv.height);
-  } catch { return; /* leave it animated if the frame can't be read */ }
-  st.cv.src = cv.toDataURL('image/webp', 0.9); // webp keeps transparency and stays small
-  st.poster = true;
-}
-
-function loaded(st) {
-  st.loading = false;
-  if (!st.poster) grabPoster(st);
-  if (st.want === 'play') {
-    vis(st.img, true);
-    vis(st.cv, false);
-  } else {
-    show(st); // it was only loaded for its still frame
-  }
-}
-
-/** Put a GIF into the state the scheduler picked for it. */
-function show(st) {
-  if (st.want === 'play') {
-    if (!st.img.getAttribute('src')) {
-      st.loading = true;
-      st.img.src = st.url; // shown once loaded; the still frame covers the gap
-      if (st.poster) { vis(st.cv, true); vis(st.img, false); }
-    } else if (!st.loading) {
-      vis(st.img, true);
-      vis(st.cv, false);
-    }
-    return;
-  }
-  if (st.poster) {
-    vis(st.cv, true);
-    vis(st.img, false);
-    if (st.img.getAttribute('src')) drop(st); // stop decoding it
-  } else if (st.want === 'off') {
-    if (st.img.getAttribute('src') && !st.loading) drop(st);
-  }
-}
+// ---------------------------------------------------------------- choosing what to show
 
 let queued = false;
 export function schedule() {
   if (queued) return;
   queued = true;
-  setTimeout(evaluate, 120);
+  requestAnimationFrame(evaluate);
 }
 
 function evaluate() {
   queued = false;
-  if (!S.name || !tracked.size) return;
+  if (!S.name || !tracked.size || isMoving()) return; // 'camera-settled' runs us again
   const vb = viewBox();
   const z = S.cam.z;
-  const m = 200 / z;
-  const near = { x: vb.x - m, y: vb.y - m, w: vb.w + 2 * m, h: vb.h + 2 * m };
-  const candidates = [];
-  for (const [id, st] of tracked) {
-    const it = getItem(id);
-    if (!it) continue;
-    const b = box(it);
-    if (!intersects(near, b)) { st.want = 'off'; continue; }
-    if (Math.min(b.w, b.h) * z < MIN_PX) { st.want = 'still'; continue; }
-    const ix = Math.max(0, Math.min(b.x + b.w, vb.x + vb.w) - Math.max(b.x, vb.x));
-    const iy = Math.max(0, Math.min(b.y + b.h, vb.y + vb.h) - Math.max(b.y, vb.y));
-    candidates.push([st, ix * iy]);
-  }
-  // the biggest on screen get to move
-  candidates.sort((a, b) => b[1] - a[1]);
-  candidates.forEach(([st], i) => { st.want = i < BUDGET ? 'play' : 'still'; });
-
-  let loading = [...tracked.values()].filter(s => s.loading).length;
+  const gifs = [];
   for (const st of tracked.values()) {
-    // a visible GIF with no still frame yet has to load once to get one
-    if (st.want === 'still' && !st.poster && !st.img.getAttribute('src')) {
-      if (loading >= MAX_LOADS) { schedule(); continue; }
-      loading++;
-      st.loading = true;
-      st.img.src = st.url;
-      continue;
+    const it = getItem(st.id);
+    if (!it || !st.el._on) { st.want = 'off'; continue; } // culled: not drawn at all
+    // ask for the saved preview the first time the image comes near the screen
+    if (st.thumbState === 'unknown' && !st.thumb.getAttribute('src')) st.thumb.src = assetUrl(S.name, '.thumbs/' + thumbFile(st.src));
+    const b = box(it);
+    const px = Math.max(b.w, b.h) * z;
+    if (st.gif) {
+      st.want = 'thumb';
+      if (px >= MIN_PX && intersects(vb, b)) {
+        const ix = Math.max(0, Math.min(b.x + b.w, vb.x + vb.w) - Math.max(b.x, vb.x));
+        const iy = Math.max(0, Math.min(b.y + b.h, vb.y + vb.h) - Math.max(b.y, vb.y));
+        gifs.push([st, ix * iy]);
+      }
+    } else {
+      st.want = px > THUMB * 0.9 ? 'full' : 'thumb';
     }
-    show(st);
+  }
+  gifs.sort((a, b) => b[1] - a[1]);
+  for (let i = 0; i < Math.min(BUDGET, gifs.length); i++) gifs[i][0].want = 'full';
+  for (const st of tracked.values()) show(st);
+  pump();
+}
+
+function show(st) {
+  if (st.want === 'off') return; // hidden by culling; leave it as it was
+  let lod = st.want;
+  if (lod === 'thumb' && st.thumbState !== 'ok') {
+    // no preview yet: a plain placeholder for the moment (loading every original
+    // at once is exactly what makes a big board stutter), unless it can't have one
+    lod = st.thumbState === 'failed' ? 'full' : 'wait';
+    if (st.thumbState === 'missing') queueMake(st);
+  }
+  if (lod === 'full' && !st.full.getAttribute('src')) st.full.src = st.url;
+  if (st.lod !== lod) {
+    st.lod = lod;
+    st.el.dataset.lod = lod;
   }
 }
 
-on('camera', schedule);
+// ---------------------------------------------------------------- making previews
+
+const queue = [];
+let making = 0;
+
+function queueMake(st) {
+  if (st.thumbState === 'making') return;
+  st.thumbState = 'making';
+  queue.push(st);
+  pump();
+}
+
+function pump() {
+  // previews are made off the main thread, so this can keep going while you move
+  while (making < MAKERS && queue.length) {
+    const st = queue.shift();
+    if (tracked.get(st.id) !== st) continue;
+    making++;
+    makeThumb(st).finally(() => { making--; pump(); });
+  }
+}
+
+/** Shrink an image file to a small WebP preview (decoding happens off the main thread). */
+async function previewOf(blob, tall) {
+  const bmp = await createImageBitmap(blob, tall
+    ? { resizeHeight: THUMB, resizeQuality: 'medium' }
+    : { resizeWidth: THUMB, resizeQuality: 'medium' });
+  const cv = new OffscreenCanvas(bmp.width, bmp.height);
+  cv.getContext('2d').drawImage(bmp, 0, 0);
+  bmp.close();
+  return cv.convertToBlob({ type: 'image/webp', quality: 0.82 });
+}
+
+/** Make and save the preview for a just-added image file (the file is already in memory). */
+export async function prepareThumb(board, src, file, tall) {
+  try {
+    await api.saveThumb(board, thumbFile(src), await previewOf(file, tall));
+  } catch { /* it'll be made later when the image is shown */ }
+}
+
+async function makeThumb(st) {
+  const board = S.name;
+  try {
+    const blob = await (await fetch(st.url)).blob();
+    const it = getItem(st.id);
+    const out = await previewOf(blob, it && it.h > it.w);
+    if (S.name !== board || tracked.get(st.id) !== st) return;
+    api.saveThumb(board, thumbFile(st.src), out).catch(() => {});
+    st.thumbState = 'unknown';
+    st.thumb.src = URL.createObjectURL(out); // onload marks it ready
+  } catch {
+    st.thumbState = 'failed'; // e.g. an SVG: it just always shows the original
+    schedule();
+  }
+}
+
+on('camera-settled', () => { schedule(); pump(); });
 on('rendered', schedule);

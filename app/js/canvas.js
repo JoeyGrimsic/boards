@@ -1,5 +1,5 @@
 // Camera: pan, zoom, fly-to and the dot grid.
-import { S, emit, on, scheduleSave } from './state.js';
+import { S, emit, on } from './state.js';
 import { box, union, clamp } from './geom.js';
 
 export const MIN_Z = 0.03;
@@ -10,20 +10,58 @@ export const world = document.getElementById('world');
 
 let flying = null;
 
-let settle = null;
+// Zoomed out past this, text is too small to read and is drawn simplified.
+export const FAR_Z = 0.22;
 
+let settleTimer = null;
+let moving = false;
+export const isMoving = () => moving;
+
+/**
+ * Move the camera. Per frame this only changes one transform: while the camera
+ * moves the board slides around as one finished picture. Everything that costs
+ * real work (outline thickness via --iz, which items are drawn, GIFs, the
+ * center-piece bar...) waits for 'camera-settled', a moment after it stops.
+ */
 export function applyCamera(save = true) {
   const { x, y, z } = S.cam;
-  // while the camera moves, slide the board around as one finished picture
-  // instead of redrawing everything every frame; redraw it crisp once it stops
-  world.classList.add('moving');
-  clearTimeout(settle);
-  settle = setTimeout(() => world.classList.remove('moving'), 160);
+  if (!moving) {
+    moving = true;
+    world.classList.add('moving');
+  }
   world.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
-  world.style.setProperty('--iz', 1 / z);
   drawGrid();
   emit('camera');
-  if (save) scheduleSave(1500);
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(settleCamera, 140);
+  if (save) saveCamera();
+}
+
+/** The camera stopped (or a board just opened): catch up on the deferred work. */
+export function settleCamera() {
+  clearTimeout(settleTimer);
+  moving = false;
+  world.classList.remove('moving');
+  world.style.setProperty('--iz', 1 / S.cam.z);
+  world.classList.toggle('far', S.cam.z < FAR_Z);
+  emit('camera-settled');
+}
+
+// The camera is remembered per board in this browser, not written into
+// board.json on every move (that meant re-saving the whole board constantly).
+let camTimer = null;
+function saveCamera() {
+  clearTimeout(camTimer);
+  camTimer = setTimeout(() => {
+    try { localStorage.setItem(`doodle-cam:${S.name}`, JSON.stringify(S.cam)); } catch { /* ignore */ }
+  }, 400);
+}
+
+export function savedCamera(name) {
+  try {
+    const c = JSON.parse(localStorage.getItem(`doodle-cam:${name}`));
+    return c && isFinite(c.z) && c.z > 0 ? c : null;
+  } catch { return null; }
 }
 
 // One dot per tile, drawn as a tiny SVG image: tiling an image is far cheaper
@@ -48,7 +86,9 @@ on('theme', () => {
   drawGrid();
 });
 
+const grid = document.getElementById('grid');
 let lastTile = '';
+let lastSize = 0;
 function drawGrid() {
   const { x, y, z } = S.cam;
   let s = 32 * z;
@@ -56,12 +96,19 @@ function drawGrid() {
   while (s > 90) s /= 4;
   if (!dotColor) dotColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim();
   const tile = dotTile(s);
-  if (tile !== lastTile) { vp.style.backgroundImage = tile; lastTile = tile; }
-  vp.style.backgroundSize = `${s}px ${s}px`;
-  vp.style.backgroundPosition = `${x - s / 2}px ${y - s / 2}px`;
+  if (tile !== lastTile) { grid.style.backgroundImage = tile; lastTile = tile; }
+  // the dots only need redrawing when their spacing changes (zooming);
+  // panning just slides the layer
+  if (s !== lastSize) { grid.style.backgroundSize = `${s}px ${s}px`; lastSize = s; }
+  const wrap = v => ((v % s) + s) % s - s;
+  grid.style.transform = `translate(${wrap(x - s / 2)}px, ${wrap(y - s / 2)}px)`;
 }
 
-const rect = () => vp.getBoundingClientRect();
+// The viewport always fills the window, so its rectangle only changes on resize.
+// Caching it keeps mouse/wheel handling from forcing the browser to re-layout.
+let vpRect = null;
+const rect = () => (vpRect ||= vp.getBoundingClientRect());
+addEventListener('resize', () => { vpRect = null; settleCamera(); });
 
 export function screenToWorld(sx, sy) {
   const r = rect();

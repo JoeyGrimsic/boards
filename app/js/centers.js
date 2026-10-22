@@ -121,7 +121,7 @@ const queue = () => {
   queued = true;
   requestAnimationFrame(draw);
 };
-on('camera', queue);
+on('camera-settled', queue);
 on('change', queue);
 on('rendered', queue);
 

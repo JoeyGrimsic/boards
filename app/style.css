@@ -105,6 +105,13 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; backgro
   position: fixed; inset: 0; overflow: hidden; touch-action: none;
   background-color: var(--bg);
 }
+/* The dot grid is its own small layer that just slides around: if it were
+   painted together with the board, every pan would make the browser repaint
+   and re-layer the entire board. */
+#grid {
+  position: absolute; left: 0; top: 0; width: calc(100% + 200px); height: calc(100% + 200px);
+  pointer-events: none; will-change: transform;
+}
 #viewport.grab { cursor: grab; }
 #viewport.panning { cursor: grabbing; }
 body.arrow-mode #viewport { cursor: crosshair; }
@@ -112,6 +119,11 @@ body.arrow-mode .item { cursor: crosshair !important; }
 #viewport.drop { outline: 3px dashed var(--accent); outline-offset: -14px; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; --iz: 1; }
 #world.moving { will-change: transform; }
+/* far from the view: not drawn at all (see render.js) */
+.item.culled { display: none !important; }
+/* zoomed far out: skip the small decorations nobody can see */
+#world.far .item.text.note .body { box-shadow: none; }
+#world.far .pills, #world.far .mbadge { display: none; }
 #items { position: absolute; left: 0; top: 0; }
 #links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 
@@ -165,12 +177,12 @@ body.arrow-mode .item { cursor: crosshair !important; }
 .item.editing::after { display: none; }
 
 .rh {
-  display: none; position: absolute; z-index: 3; pointer-events: auto; cursor: nwse-resize;
+  display: block; position: absolute; z-index: 3; pointer-events: auto; cursor: nwse-resize;
   right: calc(-12px * var(--iz)); bottom: calc(-12px * var(--iz));
   width: calc(15px * var(--iz)); height: calc(15px * var(--iz));
   background: var(--panel); border: calc(2px * var(--iz)) solid var(--sel); border-radius: 50%;
 }
-body:not(.multi) .item.selected:not(.music):not(.editing) .rh { display: block; }
+.item.editing .rh { display: none; }
 
 .pills { position: absolute; left: 0; top: 100%; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; width: max-content; max-width: max(100%, 260px); }
 .mbadge {
@@ -268,7 +280,11 @@ button.pill { cursor: pointer; font-size: 17px; }
 .item.editing .content { display: none; }
 
 /* ---- image */
-.item.image .poster { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 3px; }
+/* each image has its original and a small preview; anim.js picks one */
+.item.image:not([data-lod="full"]) img.full,
+.item.image:not([data-lod="thumb"]) img.thumb { display: none; }
+/* preview still being made: a quiet placeholder */
+.item.image:not([data-lod]) .body, .item.image[data-lod="wait"] .body { background: color-mix(in srgb, var(--ink) 8%, transparent); border-radius: 4px; }
 .item.image img {
   width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 3px;
   -webkit-user-drag: none; box-shadow: 0 2px 0 rgba(0, 0, 0, .06);

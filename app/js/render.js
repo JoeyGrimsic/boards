@@ -1,13 +1,19 @@
 // Turns S.items into DOM and SVG (arrows, tag threads, music radii).
+//
+// Built for big boards: anything well outside the view is "culled" (display:
+// none, so the browser does no work for it at all), threads and arrows are
+// only drawn near the view, and the small extras on an item (title, tag pills,
+// badges, resize handle) only exist on items that actually use them.
 import { S, emit, on, getItem } from './state.js';
-import { box, center, edgePoint, MUSIC_NODE } from './geom.js';
+import { box, center, edgePoint, intersects, MUSIC_NODE } from './geom.js';
+import { viewBox, isMoving } from './canvas.js';
 import { roughRect, roughCurve, arrowHead, icon, rng } from './doodle.js';
 import { itemTags, tagColor, threadEdges } from './tags.js';
 import { renderMarkdown, esc } from './markdown.js';
 import { assetUrl } from './api.js';
 import { musicLabel, getMaster } from './music.js';
 import { activeJobFor } from './jobs.js';
-import { isAnimated, track, untrack, untrackAll } from './anim.js';
+import { trackImage, untrack, untrackAll } from './anim.js';
 
 export const FONTS = {
   round: "'Fredoka', 'Nunito', system-ui, sans-serif",
@@ -63,6 +69,8 @@ export function clearAll() {
   els.clear();
   S.measured.clear();
   threadsG.innerHTML = arrowsG.innerHTML = radiiG.innerHTML = '';
+  shownThreads = shownArrows = '';
+  threadLinks = arrowLinks = [];
 }
 
 export function renderNow() {
@@ -79,7 +87,7 @@ export function renderNow() {
       els.set(it.id, el);
     }
     if (el.parentNode !== itemsEl) itemsEl.appendChild(el);
-    el.style.zIndex = ++z;
+    if (el._z !== ++z) { el._z = z; el.style.zIndex = z; }
     update(el, it);
   }
   for (const [id, el] of els) {
@@ -91,19 +99,85 @@ export function renderNow() {
       S.measured.delete(id);
     }
   }
-  // auto-height text: measure after layout
+  cull();
+  // auto-height text: measure after layout (only items that are drawn)
   for (const it of S.items) {
     if (it.type !== 'text') continue;
     const el = els.get(it.id);
-    if (el._measure || S.editing === it.id) {
+    if ((el._measure || S.editing === it.id) && el._on) {
       S.measured.set(it.id, el.offsetHeight);
       el._measure = false;
     }
   }
+  buildLinks();
   drawLinks();
   decorate();
   emit('rendered');
 }
+
+// ---------------------------------------------------------------- culling
+
+/** The part of the board worth drawing: the view plus half a screen around it. */
+function nearView() {
+  const vb = viewBox();
+  return { x: vb.x - vb.w / 2, y: vb.y - vb.h / 2, w: vb.w * 2, h: vb.h * 2 };
+}
+
+/** Hide (display:none) everything far from the view; show what came near.
+ *  While the camera moves this is all that happens (no re-render, no redrawing
+ *  threads); the rest catches up when it settles. */
+function cull(moving = false) {
+  const area = nearView();
+  const vb = viewBox();
+  // while moving, only hide things that are well away (so zooming in sheds the
+  // rest of the board) without flickering items in and out at the edges
+  const keep = moving ? { x: vb.x - vb.w * 1.5, y: vb.y - vb.h * 1.5, w: vb.w * 4, h: vb.h * 4 } : area;
+  const entering = [];
+  for (const it of S.items) {
+    if (it.type === 'arrow') continue;
+    const el = els.get(it.id);
+    if (!el) continue;
+    const pinned = S.sel.has(it.id) || S.editing === it.id;
+    const b = box(it);
+    const on = pinned || intersects(el._on ? keep : area, b);
+    if (el._on === on) continue;
+    if (!on) {
+      el._on = false;
+      el.classList.add('culled');
+      continue;
+    }
+    entering.push([el, intersects(vb, box(it)) ? 1 : 0]);
+  }
+  // what's actually on screen first, then the margin around it
+  entering.sort((a, b) => b[1] - a[1]);
+  backlog = entering.map(e => e[0]);
+  showSome();
+}
+
+// Showing hundreds of items in one go (e.g. zooming out over a big board) would
+// freeze a frame, so they're brought in a batch per frame instead.
+const SHOW_PER_FRAME = 120;
+let backlog = [];
+let backlogFrame = 0;
+function showSome() {
+  cancelAnimationFrame(backlogFrame);
+  let needMeasure = false;
+  for (const el of backlog.splice(0, SHOW_PER_FRAME)) {
+    el._on = true;
+    el.classList.remove('culled');
+    if (el._measure) needMeasure = true;
+  }
+  if (backlog.length) backlogFrame = requestAnimationFrame(showSome);
+  if (needMeasure && !isMoving()) requestRender();
+}
+
+let lastCull = 0;
+on('camera', () => {
+  // while moving, keep up every ~100ms so things are there before they're on screen
+  const now = performance.now();
+  if (now - lastCull > 100) { lastCull = now; cull(true); }
+});
+on('camera-settled', () => { cull(); drawLinks(); });
 
 // ---------------------------------------------------------------- items
 
@@ -114,16 +188,16 @@ function create(it) {
   el._type = it.type;
   let body = '';
   if (it.type === 'text') body = '<div class="content"></div>';
-  else if (it.type === 'image') body = '<img draggable="false" alt=""><img class="poster" draggable="false" alt="" hidden>';
+  else if (it.type === 'image') body = '<img class="full" draggable="false" alt=""><img class="thumb" draggable="false" alt="">';
   else if (it.type === 'video')
     body = '<video muted loop playsinline preload="metadata"></video><div class="vplay">' + icon('play') + '</div><div class="vbar"><i></i><b class="vin"></b><b class="vout"></b></div>';
   else if (it.type === 'music')
     body = `<div class="mn">${icon('music')}</div><div class="mlabel"></div>`;
-  el.innerHTML = `<div class="ctitle" title="center piece — double-click to rename"></div><div class="body">${body}</div><div class="pills"></div>` +
-    `<div class="mbadge" title="has music">${icon('music')}</div><div class="dlbadge" title="downloading music in the background"></div><div class="rh" data-handle="resize"></div>`;
+  el.innerHTML = `<div class="body">${body}</div>`;
+  el._on = true;
   if (it.type === 'video') wireVideo(el);
   if (it.type === 'image') {
-    const img = el.querySelector('img:not(.poster)');
+    const img = el.querySelector('img.full');
     img.addEventListener('error', () => el.classList.add('broken'));
     img.addEventListener('load', () => el.classList.remove('broken'));
   }
@@ -156,11 +230,7 @@ function update(el, it) {
   } else if (it.type === 'image') {
     s.width = it.w + 'px';
     s.height = it.h + 'px';
-    const img = el.querySelector('img:not(.poster)');
-    const url = assetUrl(S.name, it.src);
-    // GIFs are loaded / paused by anim.js so only the visible ones animate
-    if (isAnimated(it.src)) track(el, it.id, url);
-    else if (img._src !== url) { img.src = url; img._src = url; }
+    trackImage(el, it); // anim.js picks preview vs original, and which GIFs animate
   } else if (it.type === 'video') {
     s.width = it.w + 'px';
     s.height = it.h + 'px';
@@ -179,12 +249,36 @@ function update(el, it) {
 
   // center piece title
   el.classList.toggle('center', !!it.center);
-  if (it.center) el.querySelector('.ctitle').textContent = '✶ ' + (it.center.title || 'untitled');
+  const title = part(el, 'ctitle', !!it.center);
+  if (title) {
+    title.title = 'center piece — double-click to rename';
+    title.textContent = '✶ ' + (it.center.title || 'untitled');
+  }
 
   // tag pills (manually added tags; tags written in text are highlighted inline)
-  el.querySelector('.pills').innerHTML = (it.tags || [])
-    .map(t => `<span class="pill tg" data-tag="${esc(t)}" style="--tc:${tagColor(t)}">#${esc(t)}</span>`).join('');
-  el.classList.toggle('has-music', !!it.music && it.type !== 'music');
+  const pills = part(el, 'pills', !!it.tags?.length);
+  if (pills) pills.innerHTML = it.tags.map(t => `<span class="pill tg" data-tag="${esc(t)}" style="--tc:${tagColor(t)}">#${esc(t)}</span>`).join('');
+  const hasMusic = !!it.music && it.type !== 'music';
+  el.classList.toggle('has-music', hasMusic);
+  const badge = part(el, 'mbadge', hasMusic);
+  if (badge && !badge.firstChild) { badge.title = 'has music'; badge.innerHTML = icon('music'); }
+}
+
+/** Get (creating if needed) or remove an optional part of an item. */
+function part(el, cls, want) {
+  const parts = (el._parts ||= {});
+  let p = parts[cls];
+  if (!want) {
+    if (p) { p.remove(); delete parts[cls]; }
+    return null;
+  }
+  if (!p) {
+    p = parts[cls] = document.createElement('div');
+    p.className = cls;
+    if (cls === 'ctitle') el.prepend(p);
+    else el.appendChild(p);
+  }
+  return p;
 }
 
 function wireVideo(el) {
@@ -221,23 +315,33 @@ function decorate() {
     el.classList.toggle('dim', !!S.focusTag && !tags.has(S.focusTag));
     el.classList.toggle('hot', !!S.hoverTag && tags.has(S.hoverTag));
     el.classList.toggle('match', S.matches.has(it.id));
+    // resize handle: only on a single selected item
+    const rh = part(el, 'rh', S.sel.size === 1 && S.sel.has(it.id) && it.type !== 'music');
+    if (rh) rh.dataset.handle = 'resize';
     // background music download for this item: show its progress right on it
     const job = activeJobFor(it.id);
     el.classList.toggle('downloading', !!job);
-    if (job) {
+    const badge = part(el, 'dlbadge', !!job);
+    if (badge) {
       const total = job.entries?.length || 0;
       const text = job.kind === 'playlist' && total ? `${Math.min(job.next + 1, total)}/${total}` : 'downloading';
-      const badge = el.querySelector('.dlbadge');
-      if (badge._t !== text) { badge._t = text; badge.innerHTML = `<span class="spin"></span>${text}`; }
+      if (badge._t !== text) { badge._t = text; badge.title = 'downloading music in the background'; badge.innerHTML = `<span class="spin"></span>${text}`; }
     }
   }
 }
 
 // ---------------------------------------------------------------- svg layer
 
-function drawLinks() {
-  // tag threads
-  let h = '';
+// Threads and arrows are worked out when the board changes (buildLinks), and
+// only the ones near the view are put on the page (drawLinks, also re-run when
+// the camera settles).
+let threadLinks = [];
+let arrowLinks = [];
+
+const spanBox = (p, q) => ({ x: Math.min(p.x, q.x) - 40, y: Math.min(p.y, q.y) - 40, w: Math.abs(p.x - q.x) + 80, h: Math.abs(p.y - q.y) + 80 });
+
+function buildLinks() {
+  threadLinks = [];
   if (S.showThreads || S.focusTag || S.hoverTag) {
     for (const e of threadEdges()) {
       const hot = e.tag === S.hoverTag || e.tag === S.focusTag;
@@ -246,13 +350,10 @@ function drawLinks() {
       const p1 = edgePoint(e.ba, center(e.bb), 6);
       const p2 = edgePoint(e.bb, center(e.ba), 6);
       const { d } = roughCurve(p1.x, p1.y, p2.x, p2.y, e.tag + e.a.id + e.b.id, 0.14);
-      h += `<path class="thread${hot ? ' hot' : ''}" d="${d}" style="stroke:${tagColor(e.tag)}"/>`;
+      threadLinks.push({ b: spanBox(p1, p2), html: `<path class="thread${hot ? ' hot' : ''}" d="${d}" style="stroke:${tagColor(e.tag)}"/>` });
     }
   }
-  threadsG.innerHTML = h;
-
-  // arrows
-  h = '';
+  arrowLinks = [];
   for (const a of S.items) {
     if (a.type !== 'arrow') continue;
     const A = getItem(a.from), B = getItem(a.to);
@@ -265,15 +366,26 @@ function drawLinks() {
     const sel = S.sel.has(a.id) ? ' selected' : '';
     const dim = S.focusTag && !(itemTags(A).has(S.focusTag) && itemTags(B).has(S.focusTag)) ? ' dim' : '';
     const mx = 0.25 * p1.x + 0.5 * cx + 0.25 * p2.x, my = 0.25 * p1.y + 0.5 * cy + 0.25 * p2.y;
-    h += `<g class="arrow${sel}${dim}" data-id="${a.id}"><path class="hit" d="${d}"/>` +
-      `<path class="stroke" d="${d}${arrowHead(p2.x, p2.y, cx, cy, 16)}" style="stroke:${col}"/>` +
-      (a.label ? `<text class="alabel" x="${mx}" y="${my}" style="fill:${col}">${esc(a.label)}</text>` : '') + '</g>';
+    arrowLinks.push({
+      b: spanBox(p1, p2),
+      html: `<g class="arrow${sel}${dim}" data-id="${a.id}"><path class="hit" d="${d}"/>` +
+        `<path class="stroke" d="${d}${arrowHead(p2.x, p2.y, cx, cy, 16)}" style="stroke:${col}"/>` +
+        (a.label ? `<text class="alabel" x="${mx}" y="${my}" style="fill:${col}">${esc(a.label)}</text>` : '') + '</g>',
+    });
   }
-  arrowsG.innerHTML = h;
+}
+
+let shownThreads = '', shownArrows = '';
+function drawLinks() {
+  const area = nearView();
+  const pick = list => list.filter(l => intersects(area, l.b)).map(l => l.html).join('');
+  const t = pick(threadLinks), a = pick(arrowLinks);
+  if (t !== shownThreads) threadsG.innerHTML = shownThreads = t;
+  if (a !== shownArrows) arrowsG.innerHTML = shownArrows = a;
 
   // music radius for selected music sources, plus the live preview while the
   // music dialog is open
-  h = '';
+  let h = '';
   const pv = S.musicPreview;
   const ring = (b, r, cls) => {
     const c = center(b);

@@ -39,6 +39,7 @@ export const api = {
   youtube: (name, opts) => call('POST', `${b(name)}/youtube`, opts),
   youtubeList: url => call('POST', '/api/youtube-list', { url }),
   loudness: (name, src) => call('POST', `${b(name)}/loudness`, { src }),
+  saveThumb: (name, file, blob) => call('POST', `${b(name)}/thumbs/${file}`, blob, { 'Content-Type': 'image/webp' }),
   musicJobs: name => call('GET', `${b(name)}/music-jobs`),
   startMusicJob: (name, job) => call('POST', `${b(name)}/music-jobs`, job),
   updateMusicJob: (name, id, data) => call('POST', `${b(name)}/music-jobs/${id}`, data),

@@ -91,9 +91,14 @@ Press **`?`** in the app for the full list. The essentials:
 
 While typing: `Esc` finishes, `Tab` accepts a tag suggestion (otherwise `Tab` / `shift+Tab`, or `ctrl+]` / `ctrl+[`, indent and outdent the paragraph, like Google Docs), `ctrl+B` / `ctrl+I` for bold / italic, alt+F changes font, `ctrl+shift+>` / `<` resizes. Lines starting with `- `, `[ ] ` or `# ` become bullets, checkboxes and headings. Indented bullets change shape by level (● ○ ■). Drag a text box's corner to change its width, or shift+drag the corner to scale the font.
 
-## Lots of GIFs
+## Big boards and lots of GIFs
 
-Add as many GIFs as you like. Only the ones on screen and big enough to see actually animate, up to 16 at once with the biggest first. The rest show a still frame until you get close, so the board stays smooth however many it holds.
+Boards can grow as big as you like, with as many images and GIFs as you want.
+
+- Only what's near the screen is drawn.
+- Each image gets a small preview, made once and kept in the board's hidden `.thumbs/` folder (safe to delete; it's rebuilt as needed). The full image loads only when you zoom in close enough to need it.
+- Only the GIFs on screen and big enough to see actually animate, up to 16 at once with the biggest first.
+- While you pan or zoom, the board moves as one picture. Details like outlines, tag threads and GIFs catch up a moment after you stop.
 
 ## Web app or desktop app?
 

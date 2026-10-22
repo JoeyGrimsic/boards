@@ -2,7 +2,7 @@
 import './ui.js';
 import { S, reindex, resetHistory, saveNow, scheduleSave, isDirty, serialize, emit, on } from './state.js';
 import { api } from './api.js';
-import { applyCamera, fitAll } from './canvas.js';
+import { applyCamera, fitAll, settleCamera, savedCamera } from './canvas.js';
 import { clearAll, renderNow, invalidate } from './render.js';
 import { initChrome, showBoardName, syncButtons, togglePanel } from './chrome.js';
 import { stopAll, normalizeMusic } from './music.js';
@@ -63,12 +63,14 @@ async function openBoard(name) {
   showBoardName();
   syncButtons();
   renderNow();
-  if (data.camera && isFinite(data.camera.z) && data.camera.z > 0) {
-    Object.assign(S.cam, data.camera);
+  const cam = savedCamera(S.name) || data.camera; // where you were last, in this browser
+  if (cam && isFinite(cam.z) && cam.z > 0) {
+    Object.assign(S.cam, cam);
     applyCamera(false);
   } else {
     fitAll(false);
   }
+  settleCamera();
   emit('selection');
   emit('savestate', 'saved');
   resetPieces();

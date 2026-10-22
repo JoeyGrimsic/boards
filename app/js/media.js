@@ -6,6 +6,7 @@ import { toast, modal } from './ui.js';
 import { openMusicDialog } from './music.js';
 import { endEdit, editor } from './text.js';
 import { esc } from './markdown.js';
+import { prepareThumb } from './anim.js';
 
 export const YT_RE = /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?|shorts\/|live\/|embed\/|playlist\?)|youtu\.be\/)\S+$/i;
 const IMG_URL_RE = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?\S*)?$/i;
@@ -72,6 +73,7 @@ export async function addFiles(files, p = spot()) {
     try {
       const dims = kind === 'audio' ? null : await measure(file, kind);
       const res = await api.upload(S.name, file, file.name);
+      if (kind === 'image') await prepareThumb(S.name, res.src, file, dims.h > dims.w); // preview ready before it's shown
       const at = { x: p.x + off, y: p.y + off };
       off += 40;
       const it = kind === 'audio'

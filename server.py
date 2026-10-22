@@ -950,6 +950,17 @@ class Handler(BaseHTTPRequestHandler):
                                                        data.get("mode", "audio"),
                                                        data.get("start"), data.get("end")), 201)
 
+            if action == "thumbs" and method == "POST":
+                # small preview images made by the app, cached so each is only made once
+                name = parts[3] if len(parts) > 3 else ""
+                if not re.fullmatch(r"[0-9a-f]{8,16}\.webp", name):
+                    raise ApiError(400, "bad thumbnail name")
+                data = self.read_body(limit=4 * 1024 ** 2)
+                if not data.startswith(b"RIFF") or data[8:12] != b"WEBP":
+                    raise ApiError(415, "not a webp image")
+                atomic_write(board / ".thumbs" / name, data)
+                return self.send_json({"ok": True}, 201)
+
             if action == "loudness" and method == "POST":
                 return self.send_json(measure_loudness(board, str(self.read_json().get("src", ""))))
 

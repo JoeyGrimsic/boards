@@ -153,10 +153,17 @@ on('savestate', st => {
 
 // ---------------------------------------------------------------- zoom label, hint
 
+// Per camera frame only move the floating bars (cheap, and only when shown).
+// Changing any text on the page (like the zoom %) makes the browser repaint and
+// re-layer the whole board, so that waits until the camera settles.
 on('camera', () => {
-  $('zoom-label').textContent = Math.round(S.cam.z * 100) + '%';
-  placeSeltools();
-  placeTagEdit();
+  if (!seltools.hidden) placeSeltools();
+  if (!tagedit.hidden) placeTagEdit();
+});
+on('camera-settled', () => {
+  const zl = $('zoom-label');
+  const text = Math.round(S.cam.z * 100) + '%';
+  if (zl.textContent !== text) zl.textContent = text;
 });
 
 on('rendered', () => {
